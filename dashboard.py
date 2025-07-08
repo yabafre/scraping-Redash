@@ -8,6 +8,12 @@ import time
 import math
 from datetime import datetime
 from dotenv import load_dotenv
+from PIL import Image, ImageTk  # logo support
+
+try:
+    import cairosvg  # optional svg → png
+except ImportError:
+    cairosvg = None
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,8 +22,8 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
-def lighten(hex_color: str, factor: float = 0.7) -> str:
-    """Return a lighter 6‑digit hex color (0 < factor < 1 → closer to white)."""
+def lighten(hex_color: str, factor: float = 0.75) -> str:
+    """Return a lighter hex color (factor 0‑1)."""
     hex_color = hex_color.lstrip("#")
     r, g, b = (int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
     r = int(r + (255 - r) * factor)
@@ -27,7 +33,7 @@ def lighten(hex_color: str, factor: float = 0.7) -> str:
 
 
 def ceil_signed(x: float) -> int:
-    """Ceil for positives, floor for negatives to keep sign direction."""
+    """Round toward +∞ for positives, −∞ for negatives."""
     return math.ceil(x) if x >= 0 else math.floor(x)
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -35,8 +41,6 @@ def ceil_signed(x: float) -> int:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class RedashScraper:
-    """Minimal async wrapper around the Redash /results.json endpoint."""
-
     _client: httpx.AsyncClient | None = None
 
     def __init__(self, api_key: str, base_url: str):
@@ -65,15 +69,22 @@ class DashboardApp(ctk.CTk):
         self.attributes("-fullscreen", True)
         self.bind("<Escape>", lambda *_: self.attributes("-fullscreen", False))
 
-        # Theme
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
-        # Async loop
+        # logo (PNG or SVG)
+        logo_path = os.getenv("DASH_LOGO", "")
+        if logo_path and os.path.isfile(logo_path):
+            img = self._load_logo(logo_path)
+            if img:
+                self.logo = ctk.CTkImage(light_image=img, dark_image=img, size=img.size)
+                ctk.CTkLabel(self, image=self.logo, text="").place(x=20, y=20)
+
+        # async loop
         self.loop = asyncio.new_event_loop()
         threading.Thread(target=self.loop.run_forever, daemon=True).start()
 
-        # Data
+        # data
         self.scrapers = [RedashScraper(c["api_key"], base_url) for c in cfgs]
         self.queries = [c["id"] for c in cfgs]
         self.mappings = [c["mapping"] for c in cfgs]
@@ -83,6 +94,20 @@ class DashboardApp(ctk.CTk):
 
         self._build_ui()
         self._tick()
+
+    # ───────────────────────────── logo helper ────────────────────────────
+
+    def _load_logo(self, path: str):
+        try:
+            if path.lower().endswith(".svg") and cairosvg:
+                png_bytes = cairosvg.svg2png(url=path)
+                from io import BytesIO
+                return Image.open(BytesIO(png_bytes)).resize((120, 40), Image.LANCZOS)
+            else:
+                return Image.open(path).resize((120, 40), Image.LANCZOS)
+        except Exception as e:
+            logger.warning("Impossible de charger le logo %s : %s", path, e)
+            return None
 
     # ───────────────────────────── UI build ────────────────────────────────
 
@@ -100,12 +125,13 @@ class DashboardApp(ctk.CTk):
             else:
                 frame.grid(row=r, column=c, padx=14, pady=14, sticky="nsew")
 
-            ctk.CTkLabel(frame, text=title, font=("Montserrat", 20, "bold"), text_color="#ffffff").pack(pady=12)
+            title_lbl = ctk.CTkLabel(frame, text=title, font=("Montserrat", 20, "bold"), text_color="#000000")
+            title_lbl.pack(pady=10)
             val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 52, "bold"), text_color="#ffffff")
             val.pack(expand=True)
             trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 26), text_color="#ffffff")
             trend.pack(pady=6)
-            self.q[i] = {"frame": frame, "val": val, "trend": trend}
+            self.q[i] = {"frame": frame, "val": val, "trend": trend, "title": title_lbl}
 
         self.ts = ctk.CTkLabel(self, text="", font=("Montserrat", 14), text_color="#888888")
         self.ts.place(relx=1, rely=1, anchor="se", x=-16, y=-16)
@@ -121,20 +147,16 @@ class DashboardApp(ctk.CTk):
     def _refresh(self):
         async def fetch():
             for idx, (scr, qid, mp) in enumerate(zip(self.scrapers, self.queries, self.mappings)):
-                t0 = time.perf_counter()
                 data = await scr.execute_query(qid)
-                logger.info("Query %s en %.2fs", qid, time.perf_counter() - t0)
-
                 rows = data.get("query_result", {}).get("data", {}).get("rows", [])
                 if not rows:
                     continue
                 row = rows[0]
                 value = float(row.get(mp["value"], 0))
                 ratio = float(row.get(mp["ratio"], 0))
-                logger.info("Query %s: value=%s, ratio=%s", qid, value, ratio)
                 self.after(0, self._update_quad, idx, value, ratio)
 
-            self.after(0, lambda: self.ts.configure(text=f"Dernière mise à jour : {datetime.now():%H:%M:%S}"))
+            self.after(0, lambda: self.ts.configure(text=datetime.now().strftime("%H:%M:%S")))
 
         asyncio.run_coroutine_threadsafe(fetch(), self.loop)
 
@@ -143,58 +165,31 @@ class DashboardApp(ctk.CTk):
     def _update_quad(self, idx: int, value: float, ratio: float):
         unit = self.units[idx]
         color, arrow = self._style(ratio)
-        lighter = lighten(color, 0.85)
+        bg = lighten(color, 0.8)
 
-        self.q[idx]["val"].configure(text=self._fmt(value, unit), text_color=color)
-        trend_txt = f"{arrow} {ceil_signed(ratio)}%" if unit == "%" else arrow
-        self.q[idx]["trend"].configure(text=trend_txt, text_color=color)
-        self.q[idx]["frame"].configure(fg_color=lighter)
+        quad = self.q[idx]
+        quad["val"].configure(text=self._fmt(value, unit), text_color=color)
+        quad["trend"].configure(text=f"{arrow} {ceil_signed(ratio)}%" if unit == "%" else arrow, text_color=color)
+        quad["frame"].configure(fg_color=bg)
+        quad["title"].configure(text_color=color if unit == "%" else "#000000")
 
-        if unit == "%" and ratio > 0:
-            palier = (ceil_signed(ratio) // 10) * 10
-            if palier >= 10 and palier > self.last_gift[idx]:
-                self.last_gift[idx] = palier
-                self._gift_popup(palier)
+        # gift every 5 % on evolution
+        if idx == 0 and ratio > 0:
+            step = 5
+            thresh = (ceil_signed(ratio) // step) * step
+            if thresh >= step and thresh > self.last_gift[idx]:
+                self.last_gift[idx] = thresh
+                self._gift_popup(thresh)
 
-    # ───────────────────────────── Utils ───────────────────────────────────
+        # confetti when CA J-N positive
+        if idx == 2 and ratio > 0:
+            self._confetti(quad["frame"])
 
-    def _style(self, r: float):
-        if r > 0:
-            return self.COLORS["positive"], "↗"
-        if r < 0:
-            return self.COLORS["negative"], "↘"
-        return self.COLORS["neutral"], "→"
-
-    @staticmethod
-    def _fmt(num: float, unit: str):
-        if unit == "€":
-            return f"{ceil_signed(num):,}€".replace(",", " ")
-        return f"{ceil_signed(num)}{unit}"
+    # ───────────────────────────── Effects ─────────────────────────────────
 
     def _gift_popup(self, thresh: int):
         pop = ctk.CTkToplevel(self)
-        pop.title("👏 Bravo !")
-        pop.geometry("360x160")
+        pop.title("🎁 Gift")
+        pop.geometry("320x140")
         pop.attributes("-topmost", True)
-        ctk.CTkLabel(pop, text=f"🎉 {thresh}% atteint !", font=("Montserrat", 18, "bold"), text_color="#ffffff").pack(expand=True)
-        pop.after(3200, pop.destroy)
-
-# ───────────────────────────── Main ─────────────────────────────────────────
-
-def main():
-    load_dotenv()
-    base_url = os.getenv("REDASH_BASE_URL", "").strip()
-    if not base_url:
-        raise SystemExit("REDASH_BASE_URL manquant dans .env")
-
-    cfgs = [
-        {"id": 111, "api_key": os.getenv("KEY_EVOL", ""), "mapping": {"value": "EVOL", "ratio": "EVOL"}},
-        {"id": 110, "api_key": os.getenv("KEY_CA_J1", ""), "mapping": {"value": "CA", "ratio": "AVG"}},
-        {"id": 109, "api_key": os.getenv("KEY_CA_JN", ""), "mapping": {"value": "CA", "ratio": "AVG"}},
-    ]
-
-    DashboardApp(base_url, cfgs).mainloop()
-
-
-if __name__ == "__main__":
-    main()
+        ctk.CTkLabel(pop, text=f"🌟 +{thresh}% !
