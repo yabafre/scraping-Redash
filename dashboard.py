@@ -8,7 +8,7 @@ import time
 import math
 import random
 import glob
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from PIL import Image, ImageTk
 import tkinter as tk
@@ -43,6 +43,24 @@ def darken(hex_color: str, factor: float = 0.3) -> str:
 def ceil_signed(x: float) -> int:
     """Ceil for positives, floor for negatives to keep sign direction."""
     return math.ceil(x) if x >= 0 else math.floor(x)
+
+
+def format_evolution(x: float) -> float:
+    """Ne pas arrondir l'évolution, garder la précision"""
+    return x
+
+
+def get_dynamic_titles():
+    """Génère des titres dynamiques avec les dates actuelles"""
+    now = datetime.now()
+    last_year = now - timedelta(days=365)
+    
+    titles = {
+        0: "Évolution",
+        1: f"CA {last_year.strftime('%d/%m/%Y')} à {now.strftime('%Hh%M')}",
+        2: f"CA {now.strftime('%d/%m/%Y')} à {now.strftime('%Hh%M')}"
+    }
+    return titles
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Data layer
@@ -246,7 +264,9 @@ class DashboardApp(ctk.CTk):
         self.grid_rowconfigure((0, 1), weight=1)
         self.grid_columnconfigure((0, 1), weight=1)
 
-        titles = ["Évolution", "CA J-1 H0", "CA J-N"]
+        # Titres dynamiques avec dates
+        titles_dict = get_dynamic_titles()
+        titles = [titles_dict[0], titles_dict[1], titles_dict[2]]
         pos = [(0, 0), (0, 1), (1, 0)]
         self.q = {}
         
@@ -264,14 +284,14 @@ class DashboardApp(ctk.CTk):
             title_label = ctk.CTkLabel(
                 header_frame, 
                 text=title, 
-                font=("Montserrat", 20, "bold"), 
-                text_color="#000000"  # Noir et centré
+                font=("Montserrat", 24, "bold"),  
+                text_color="#000000"
             )
             title_label.pack(anchor="center")
 
-            val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 72, "bold"), text_color="#ffffff")
+            val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 76, "bold"), text_color="#ffffff")  
             val.pack(expand=True)
-            trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 36), text_color="#ffffff")
+            trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 40), text_color="#ffffff")  
             trend.pack(pady=6)
             
             # Message inspirant pour le bloc Évolution (index 0)
@@ -279,7 +299,7 @@ class DashboardApp(ctk.CTk):
                 inspiration = ctk.CTkLabel(
                     frame, 
                     text="", 
-                    font=("Montserrat", 14, "italic"), 
+                    font=("Montserrat", 18, "italic"),  
                     text_color="#888888"
                 )
                 inspiration.pack(pady=(0, 10))
@@ -317,7 +337,7 @@ class DashboardApp(ctk.CTk):
             # Placer le logo après un court délai pour s'assurer que la fenêtre est prête
             self.after(100, self._place_logo)
 
-        self.ts = ctk.CTkLabel(self, text="", font=("Montserrat", 14), text_color="#888888")
+        self.ts = ctk.CTkLabel(self, text="", font=("Montserrat", 18), text_color="#888888")  
         self.ts.place(relx=1, rely=1, anchor="se", x=-16, y=-16)
 
     def _place_logo(self):
@@ -366,15 +386,21 @@ class DashboardApp(ctk.CTk):
         
         # Couleur du titre adaptée à l'état du bloc
         if ratio > 0:
-            title_color = "#000000"  # Toujours noir
+            title_color = "#000000"  
         elif ratio < 0:
-            title_color = "#000000"  # Toujours noir
+            title_color = "#000000"  
         else:
-            title_color = "#000000"  # Toujours noir
+            title_color = "#000000"  
 
         self.q[idx]["title"].configure(text_color=title_color)
         self.q[idx]["val"].configure(text=self._fmt(value, unit), text_color=color)
-        trend_txt = f"{arrow} {ceil_signed(ratio)}%" if unit == "%" else arrow
+        
+        # Pour l'évolution, ne pas arrondir
+        if idx == 0:
+            trend_txt = f"{arrow} {format_evolution(ratio)}%" if unit == "%" else arrow
+        else:
+            trend_txt = f"{arrow} {ceil_signed(ratio)}%" if unit == "%" else arrow
+        
         self.q[idx]["trend"].configure(text=trend_txt, text_color=color)
         self.q[idx]["frame"].configure(fg_color=lighter)
 
@@ -424,10 +450,10 @@ class DashboardApp(ctk.CTk):
             except Exception as e:
                 logger.warning(f"Erreur lors du chargement du GIF {gif_path}: {e}")
                 # Fallback vers un message texte
-                self._show_text_message(f"🎁 {threshold}% atteint !")
+                self._show_text_message(f" {threshold}% atteint !")
         else:
             # Pas de GIF trouvé, afficher un message texte
-            self._show_text_message(f"🎁 {threshold}% atteint !")
+            self._show_text_message(f" {threshold}% atteint !")
     
     def _get_random_gif(self) -> str:
         """Retourne un chemin vers un GIF aléatoire dans le répertoire courant"""
