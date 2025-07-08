@@ -268,7 +268,18 @@ class DashboardApp(ctk.CTk):
             trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 26), text_color="#ffffff")
             trend.pack(pady=6)
             
-            self.q[i] = {"frame": frame, "val": val, "trend": trend, "title": title_label}
+            # Message inspirant pour le bloc Évolution (index 0)
+            if i == 0:
+                inspiration = ctk.CTkLabel(
+                    frame, 
+                    text="", 
+                    font=("Montserrat", 14, "italic"), 
+                    text_color="#888888"
+                )
+                inspiration.pack(pady=(0, 10))
+                self.q[i] = {"frame": frame, "val": val, "trend": trend, "title": title_label, "inspiration": inspiration}
+            else:
+                self.q[i] = {"frame": frame, "val": val, "trend": trend, "title": title_label}
             
             # Initialiser l'animation confettis pour le bloc CA J-N (index 2)
             if i == 2:
@@ -325,6 +336,16 @@ class DashboardApp(ctk.CTk):
         trend_txt = f"{arrow} {ceil_signed(ratio)}%" if unit == "%" else arrow
         self.q[idx]["trend"].configure(text=trend_txt, text_color=color)
         self.q[idx]["frame"].configure(fg_color=lighter)
+
+        # Message inspirant pour le bloc Évolution (index 0) quand positif
+        if idx == 0:
+            if ratio > 0:
+                self.q[idx]["inspiration"].configure(
+                    text="1% d'inspiration et 99% de transpiration.",
+                    text_color="#2ECC71"
+                )
+            else:
+                self.q[idx]["inspiration"].configure(text="")
 
         # Animation confettis pour CA J-N (index 2) quand positif
         if idx == 2 and ratio > 0 and self.confetti_animation:
