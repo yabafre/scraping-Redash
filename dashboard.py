@@ -222,8 +222,15 @@ class DashboardApp(ctk.CTk):
                         continue
                     else:
                         image = Image.open(path)
-                        # Redimensionner le logo
-                        image = image.resize((60, 60), Image.Resampling.LANCZOS)
+                        # Redimensionner le logo avec une largeur minimale de 198px
+                        original_width, original_height = image.size
+                        if original_width < 198:
+                            # Calculer la nouvelle hauteur en gardant le ratio
+                            new_height = int((198 * original_height) / original_width)
+                            image = image.resize((198, new_height), Image.Resampling.LANCZOS)
+                        else:
+                            # Garder la taille originale si elle est déjà >= 198px
+                            image = image.resize((original_width, original_height), Image.Resampling.LANCZOS)
                         self.logo_image = ImageTk.PhotoImage(image)
                         logger.info(f"Logo chargé: {path}")
                         break
@@ -253,15 +260,15 @@ class DashboardApp(ctk.CTk):
             
             if self.logo_image and i == 0:  # Afficher le logo seulement sur le premier bloc
                 logo_label = ctk.CTkLabel(header_frame, image=self.logo_image, text="")
-                logo_label.pack(side="left", padx=(20, 10))
+                logo_label.pack(pady=(0, 10))
             
             title_label = ctk.CTkLabel(
                 header_frame, 
                 text=title, 
                 font=("Montserrat", 20, "bold"), 
-                text_color="#000000"  # Noir par défaut
+                text_color="#000000"  # Noir et centré
             )
-            title_label.pack(side="left" if self.logo_image and i == 0 else "top")
+            title_label.pack(anchor="center")
 
             val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 52, "bold"), text_color="#ffffff")
             val.pack(expand=True)
@@ -325,11 +332,11 @@ class DashboardApp(ctk.CTk):
         
         # Couleur du titre adaptée à l'état du bloc
         if ratio > 0:
-            title_color = darken(self.COLORS["positive"], 0.2)  # Vert foncé
+            title_color = "#000000"  # Toujours noir
         elif ratio < 0:
-            title_color = darken(self.COLORS["negative"], 0.2)  # Rouge foncé
+            title_color = "#000000"  # Toujours noir
         else:
-            title_color = "#000000"  # Noir pour neutre
+            title_color = "#000000"  # Toujours noir
 
         self.q[idx]["title"].configure(text_color=title_color)
         self.q[idx]["val"].configure(text=self._fmt(value, unit), text_color=color)
