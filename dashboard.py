@@ -392,7 +392,9 @@ class DashboardApp(ctk.CTk):
         else:
             title_color = "#000000"  
 
-        self.q[idx]["title"].configure(text_color=title_color)
+        # Mettre à jour les titres dynamiquement avec les nouvelles dates/heures
+        titles_dict = get_dynamic_titles()
+        self.q[idx]["title"].configure(text=titles_dict[idx], text_color=title_color)
         self.q[idx]["val"].configure(text=self._fmt(value, unit), text_color=color)
         
         # Pour l'évolution, ne pas arrondir
@@ -423,9 +425,10 @@ class DashboardApp(ctk.CTk):
         if idx == 2 and ratio > 0 and self.confetti_animation:
             self.confetti_animation.start_animation()
 
-        # Gestion des gifts à chaque 5% pour tous les blocs
-        if ratio > 0:
-            current_threshold = (ceil_signed(ratio) // 5) * 5
+        # Gestion des GIFs à chaque 5% UNIQUEMENT pour le bloc Évolution (index 0)
+        if idx == 0 and ratio > 0:
+            # Calculer le palier de 5% atteint (5, 10, 15, 20, etc.)
+            current_threshold = int(ratio // 5) * 5
             if current_threshold >= 5 and current_threshold > self.last_gift[idx]:
                 self.last_gift[idx] = current_threshold
                 self._show_gif_message(current_threshold)
