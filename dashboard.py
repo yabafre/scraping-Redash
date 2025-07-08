@@ -395,7 +395,14 @@ class DashboardApp(ctk.CTk):
         # Mettre à jour les titres dynamiquement avec les nouvelles dates/heures
         titles_dict = get_dynamic_titles()
         self.q[idx]["title"].configure(text=titles_dict[idx], text_color=title_color)
-        self.q[idx]["val"].configure(text=self._fmt(value, unit), text_color=color)
+        
+        # Pour l'évolution, ne pas arrondir la valeur
+        if idx == 0:
+            formatted_value = f"{format_evolution(value)}{unit}"
+        else:
+            formatted_value = self._fmt(value, unit)
+        
+        self.q[idx]["val"].configure(text=formatted_value, text_color=color)
         
         # Pour l'évolution, ne pas afficher le trend (pourcentage)
         if idx == 0:
@@ -410,17 +417,20 @@ class DashboardApp(ctk.CTk):
         if idx == 0:
             if ratio > 0:
                 self.q[idx]["inspiration"].configure(
-                    text="1% d'inspiration et 99% de transpiration.",
-                    text_color="#2ECC71"
+                    text="💪 1% d'inspiration et 99% de transpiration. ✨",
+                    text_color="#FFD700"  # Couleur dorée
                 )
             elif ratio < 0:
                 self.q[idx]["inspiration"].configure(
-                    text="Il n'y a de vie que dans les marges.",
-                    text_color="#E74C3C"
+                    text="🌱 Il n'y a de vie que dans les marges. 🎯",
+                    text_color="#FF6B6B"  # Couleur corail
                 )
             else:
-                self.q[idx]["inspiration"].configure(text="")
-
+                self.q[idx]["inspiration"].configure(
+                    text="⚖️ L'équilibre est la clé du succès. 🔑",
+                    text_color="#87CEEB"  # Couleur bleu ciel
+                )
+        
         # Animation confettis pour CA J-N (index 2) quand positif
         if idx == 2 and ratio > 0 and self.confetti_animation:
             self.confetti_animation.start_animation()
