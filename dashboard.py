@@ -291,20 +291,20 @@ class DashboardApp(ctk.CTk):
 
             val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 76, "bold"), text_color="#ffffff")  
             val.pack(expand=True)
-            trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 40), text_color="#ffffff")  
-            trend.pack(pady=6)
             
-            # Message inspirant pour le bloc Évolution (index 0)
+            # Pour le bloc Évolution (index 0), pas de trend, plus de place pour le message
             if i == 0:
                 inspiration = ctk.CTkLabel(
                     frame, 
                     text="", 
-                    font=("Montserrat", 18, "italic"),  
+                    font=("Montserrat", 22, "italic"),  
                     text_color="#888888"
                 )
-                inspiration.pack(pady=(0, 10))
-                self.q[i] = {"frame": frame, "val": val, "trend": trend, "title": title_label, "inspiration": inspiration}
+                inspiration.pack(pady=(0, 20), expand=True)
+                self.q[i] = {"frame": frame, "val": val, "title": title_label, "inspiration": inspiration}
             else:
+                trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 40), text_color="#ffffff")  
+                trend.pack(pady=6)
                 self.q[i] = {"frame": frame, "val": val, "trend": trend, "title": title_label}
             
             # Initialiser l'animation confettis pour le bloc CA J-N (index 2)
@@ -397,13 +397,13 @@ class DashboardApp(ctk.CTk):
         self.q[idx]["title"].configure(text=titles_dict[idx], text_color=title_color)
         self.q[idx]["val"].configure(text=self._fmt(value, unit), text_color=color)
         
-        # Pour l'évolution, ne pas arrondir
+        # Pour l'évolution, ne pas afficher le trend (pourcentage)
         if idx == 0:
-            trend_txt = f"{arrow} {format_evolution(ratio)}%" if unit == "%" else arrow
+            # Pas de trend pour l'évolution
+            pass
         else:
             trend_txt = f"{arrow} {ceil_signed(ratio)}%" if unit == "%" else arrow
-        
-        self.q[idx]["trend"].configure(text=trend_txt, text_color=color)
+            self.q[idx]["trend"].configure(text=trend_txt, text_color=color)
         self.q[idx]["frame"].configure(fg_color=lighter)
 
         # Message inspirant pour le bloc Évolution (index 0) quand positif
