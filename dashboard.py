@@ -306,14 +306,14 @@ class DashboardApp(ctk.CTk):
 
         # Logo en haut à droite (après la création des autres éléments)
         if self.logo_image:
-            self.logo_frame = ctk.CTkFrame(self, fg_color="transparent")
+            self.logo_frame = ctk.CTkFrame(self, fg_color="#2b2b2b", corner_radius=10)
             self.logo_label = ctk.CTkLabel(
                 self.logo_frame, 
                 image=self.logo_image, 
                 text="",
-                fg_color="transparent"  # Pas de background pour le logo
+                fg_color="transparent"
             )
-            self.logo_label.pack()
+            self.logo_label.pack(padx=10, pady=10)
             # Placer le logo après un court délai pour s'assurer que la fenêtre est prête
             self.after(100, self._place_logo)
 
@@ -323,9 +323,11 @@ class DashboardApp(ctk.CTk):
     def _place_logo(self):
         """Place le logo en haut à droite après l'initialisation de la fenêtre"""
         if hasattr(self, 'logo_frame'):
-            self.logo_frame.place(relx=1.0, rely=0.0, anchor="ne", x=-20, y=20)
+            self.logo_frame.place(relx=0.98, rely=0.02, anchor="ne")
             # S'assurer que le logo reste au-dessus des autres éléments
             self.logo_frame.lift()
+            # Forcer la mise à jour de l'affichage
+            self.logo_frame.update()
     
     # ───────────────────────────── Scheduler ───────────────────────────────
 
