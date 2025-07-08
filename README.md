@@ -31,43 +31,43 @@ Ce projet contient une application Tkinter affichant les données provenant de R
    ```
 2. **Installation des dépendances Python**
    ```bash
-   pip install requests schedule
+   pip install httpx python-dotenv
    ```
-3. **Copie du fichier `dashboard.py`** du dépôt et configuration des variables `api_key`, `base_url` et des IDs de requêtes.
+3. **Création d'un fichier `.env`** contenant votre clé et l'URL Redash :
+   ```bash
+   REDASH_API_KEY=ma_cle
+   REDASH_BASE_URL=https://redash.exemple.com
+   ```
+4. **Copie du fichier `dashboard.py`** du dépôt et configuration des IDs de requêtes.
 4. **Test de l'application**
    ```bash
    python dashboard.py
    ```
 
-## Lancement automatique en mode plein écran
+## Lancement automatique avec systemd
 
-Pour démarrer le dashboard à l'ouverture de session :
+Pour démarrer le dashboard au boot, créez un service systemd :
 
-1. Activez l'autologin dans `raspi-config` : `System Options` → `Boot / Auto Login` → `Desktop Autologin`.
-2. Créez ou modifiez `~/.config/lxsession/LXDE-pi/autostart` et ajoutez :
-   ```bash
-   @lxpanel --profile LXDE-pi
-   @pcmanfm --desktop --profile LXDE-pi
-   @xscreensaver -no-splash
-   @unclutter -idle 1
-   @bash /home/pi/dashboard-project/run_dashboard.sh
+1. Fichier `/etc/systemd/system/dashboard.service` :
+   ```ini
+   [Unit]
+   Description=Dashboard Ventes Redash
+   After=network.target
+
+   [Service]
+   User=pi
+   WorkingDirectory=/home/pi/dashboard-project
+   EnvironmentFile=/home/pi/dashboard-project/.env
+   ExecStart=/home/pi/dashboard-project/venv_dashboard/bin/python dashboard.py
+   Restart=always
+
+   [Install]
+   WantedBy=multi-user.target
    ```
-3. Créez le script `~/dashboard-project/run_dashboard.sh` :
+2. Activez le service :
    ```bash
-   #!/bin/bash
-   cd /home/pi/dashboard-project
-   source venv_dashboard/bin/activate
-   python3 dashboard.py
-   ```
-   Rendez-le exécutable :
-   ```bash
-   chmod +x ~/dashboard-project/run_dashboard.sh
-   ```
-4. Optionnel : pour empêcher la mise en veille de l'écran, ajoutez dans `/etc/xdg/lxsession/LXDE-pi/autostart` :
-   ```bash
-   @xset s off
-   @xset -dpms
-   @xset s noblank
+   sudo systemctl enable dashboard.service
+   sudo systemctl start dashboard.service
    ```
 
 ## Récapitulatif rapide
@@ -78,7 +78,7 @@ sudo apt install python3-pip python3-venv unclutter
 mkdir ~/dashboard-project && cd ~/dashboard-project
 python3 -m venv venv_dashboard
 source venv_dashboard/bin/activate
-pip install requests schedule
+pip install httpx python-dotenv
 python dashboard.py
 ```
 
