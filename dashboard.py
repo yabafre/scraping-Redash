@@ -52,6 +52,10 @@ class DashboardApp(ctk.CTk):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
+        # Boucle asyncio dédiée
+        self.loop = asyncio.new_event_loop()
+        threading.Thread(target=self.loop.run_forever, daemon=True).start()
+
         self.setup_layout()
         self.start_auto_refresh()
 
@@ -98,7 +102,7 @@ class DashboardApp(ctk.CTk):
         self.fade(self.quadrants[idx]["frame"], color)
 
         # Mise à jour des labels
-        self.quadrants[idx]["data"].configure(text=value_text, fg_color=None, text_color=color)
+        self.quadrants[idx]["data"].configure(text=value_text, text_color=color)
         # On affiche le ratio avec unité pour l'évolution et la conversion
         if unit == "%":
             trend_text = f"{arrow} {math.ceil(ratio)}{unit}"
@@ -155,7 +159,7 @@ class DashboardApp(ctk.CTk):
             ts = datetime.now().strftime("%H:%M:%S")
             self.after(0, lambda: self.ts_label.configure(text=f"Dernière mise à jour : {ts}"))
 
-        threading.Thread(target=lambda: asyncio.run(fetch_all()), daemon=True).start()
+        asyncio.run_coroutine_threadsafe(fetch_all(), self.loop)
 
 def main():
     load_dotenv()
