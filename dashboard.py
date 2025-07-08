@@ -9,19 +9,35 @@ import math
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Configuration du logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def transparent(color: str, alpha: str = "22") -> str:
+    """Return the hex color with an added alpha channel (00‑FF)."""
+    color = color.lstrip("#")
+    if len(color) == 6:
+        return f"#{color}{alpha}"
+    return f"#{color}"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Data layer
+# ──────────────────────────────────────────────────────────────────────────────
+
 class RedashScraper:
-    def __init__(self, api_key: str, base_url: str) -> None:
+    """Minimal async wrapper around the Redash /results.json endpoint."""
+
+    _shared_client: httpx.AsyncClient | None = None
+
+    def __init__(self, api_key: str, base_url: str):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
-        self.headers = {"Authorization": f"Key {self.api_key}"}
-        self.client = httpx.AsyncClient(timeout=10.0)
-
-    async def close(self) -> None:
-        await self.client.aclose()
+        if RedashScraper._shared_client is None:
+            RedashScraper._shared_client = httpx.AsyncClient(timeout=10.0)
+        self.client: httpx.AsyncClient = RedashScraper._shared_client
 
     async def execute_query(self, query_id: int) -> dict:
         url = f"{self.base_url}/api/queries/{query_id}/results.json"
@@ -29,247 +45,167 @@ class RedashScraper:
         resp.raise_for_status()
         return resp.json()
 
+# ──────────────────────────────────────────────────────────────────────────────
+# UI layer
+# ──────────────────────────────────────────────────────────────────────────────
+
 class DashboardApp(ctk.CTk):
-    def __init__(self, base_url: str, query_configs: list[dict]) -> None:
+    """3‑quadrant dashboard with live data from Redash."""
+
+    COLORS = {
+        "positive": "#2ECC71",
+        "negative": "#E74C3C",
+        "neutral": "#95A5A6",
+    }
+
+    def __init__(self, base_url: str, query_cfgs: list[dict]):
         super().__init__()
         self.title("Dashboard Ventes")
         self.attributes("-fullscreen", True)
-        self.bind("<Escape>", lambda e: self.attributes("-fullscreen", False))
+        self.bind("<Escape>", lambda *_: self.attributes("-fullscreen", False))
 
-        # Scrapers, requêtes et mappings
-        self.scrapers = [RedashScraper(cfg["api_key"], base_url) for cfg in query_configs]
-        self.queries  = [cfg["id"] for cfg in query_configs]
-        self.mappings = [cfg["mapping"] for cfg in query_configs]
-
-        # Unités par quadrant (3 quadrants maintenant)
-        # 0: Évolution (%), 1: CA J-1 H0 (€), 2: CA J-N (€)
-        self.units = {0: "%", 1: "€", 2: "€"}
-
-        # Couleurs
-        self.colors = {"positive": "#2ECC71", "negative": "#E74C3C", "neutral": "#95A5A6"}
-
-        # Thème CustomTkinter
+        # Theme
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
-        # Boucle asyncio dédiée
+        # Async loop in background thread
         self.loop = asyncio.new_event_loop()
         threading.Thread(target=self.loop.run_forever, daemon=True).start()
 
-        # Stockage des derniers seuils pour éviter les messages répétés
-        self.last_gift_threshold = {0: 0, 1: 0, 2: 0}
+        # Prepare data sources
+        self.scrapers = [RedashScraper(cfg["api_key"], base_url) for cfg in query_cfgs]
+        self.queries  = [cfg["id"]         for cfg in query_cfgs]
+        self.mappings = [cfg["mapping"]    for cfg in query_cfgs]
 
-        self.setup_layout()
-        self.start_auto_refresh()
+        # Quadrant meta
+        self.units = {0: "%", 1: "€", 2: "€"}
+        self.last_gift = {0: 0, 1: 0, 2: 0}
 
-    def setup_layout(self) -> None:
-        # Configuration pour 3 quadrants : 2 en haut, 1 en bas
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=1)
+        # Build UI
+        self._build_layout()
+        self._schedule_refresh()
 
-        # Titres et positions : Évolution et CA J-1 H0 en haut, CA J-N en bas
-        titles = ["Évolution", "CA J-1 H0", "CA J-N"]
-        positions = [(0, 0), (0, 1), (1, 0)]  # (row, col)
-        
-        self.quadrants = {}
+    # ───────────────────────────── internal helpers ──────────────────────────
 
-        for i, (title, (row, col)) in enumerate(zip(titles, positions)):
-            frame = ctk.CTkFrame(master=self, corner_radius=15)
-            
-            # CA J-N prend toute la largeur en bas
-            if i == 2:  # CA J-N
-                frame.grid(row=row, column=col, columnspan=2, padx=15, pady=15, sticky="nsew")
+    def _build_layout(self):
+        self.grid_rowconfigure((0, 1), weight=1)
+        self.grid_columnconfigure((0, 1), weight=1)
+
+        titles = ["Évolution", "CA J‑1 H0", "CA J‑N"]
+        pos    = [(0, 0), (0, 1), (1, 0)]  # 3rd takes full width
+
+        self.q = {}
+        for i, ((r, c), title) in enumerate(zip(pos, titles)):
+            frame = ctk.CTkFrame(self, corner_radius=16)
+            if i == 2:
+                frame.grid(row=r, column=c, columnspan=2, sticky="nsew", padx=16, pady=16)
             else:
-                frame.grid(row=row, column=col, padx=15, pady=15, sticky="nsew")
+                frame.grid(row=r, column=c, sticky="nsew", padx=16, pady=16)
 
-            # Titre avec style amélioré
-            title_label = ctk.CTkLabel(
-                frame, 
-                text=title, 
-                font=("Montserrat", 20, "bold"),
-                text_color="#ffffff"
-            )
-            title_label.pack(pady=15)
-            
-            # Valeur principale
-            data_lbl = ctk.CTkLabel(
-                frame, 
-                text="--", 
-                font=("Montserrat", 56, "bold"),
-                text_color="#ffffff"
-            )
-            data_lbl.pack(expand=True)
-            
-            # Indicateur de tendance
-            trend_lbl = ctk.CTkLabel(
-                frame, 
-                text="→", 
-                font=("Montserrat", 28)
-            )
-            trend_lbl.pack(pady=10)
+            ctk.CTkLabel(frame, text=title, font=("Montserrat", 20, "bold"), text_color="#ffffff").pack(pady=12)
+            val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 54, "bold"), text_color="#ffffff")
+            val.pack(expand=True)
+            trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 26), text_color="#ffffff")
+            trend.pack(pady=8)
+            self.q[i] = {"frame": frame, "val": val, "trend": trend}
 
-            self.quadrants[i] = {"frame": frame, "data": data_lbl, "trend": trend_lbl}
+        self.ts = ctk.CTkLabel(self, text="", font=("Montserrat", 14), text_color="#888888")
+        self.ts.place(relx=1, rely=1, anchor="se", x=-18, y=-18)
 
-        # Timestamp avec style amélioré
-        self.ts_label = ctk.CTkLabel(
-            master=self, 
-            text="", 
-            font=("Montserrat", 14),
-            text_color="#888888"
-        )
-        self.ts_label.place(relx=1, rely=1, anchor="se", x=-15, y=-15)
+    # ───────────────────────────── data refresh ──────────────────────────────
 
-    def format_number(self, value: float, unit: str) -> str:
-        """Formate les nombres selon leur type"""
-        if unit == "€":
-            # Pour les montants en euros, formatage avec espaces
-            return f"{math.ceil(value):,}€".replace(",", " ")
-        else:
-            # Pour les pourcentages, arrondi à l'entier supérieur
-            return f"{math.ceil(value)}{unit}"
+    def _schedule_refresh(self):
+        self._refresh()
+        self.after(15_000, self._schedule_refresh)
 
-    def update_quadrant(self, idx: int, raw_value: float, ratio: float) -> None:
-        if idx not in self.quadrants:
-            logger.warning(f"Quadrant {idx} n'existe pas")
-            return
-            
+    def _refresh(self):
+        async def fetch():
+            for idx, (scraper, qid, mp) in enumerate(zip(self.scrapers, self.queries, self.mappings)):
+                t0 = time.perf_counter()
+                data = await scraper.execute_query(qid)
+                logger.info("Query %s en %.2fs", qid, time.perf_counter() - t0)
+
+                rows = data.get("query_result", {}).get("data", {}).get("rows", [])
+                if not rows:
+                    continue
+                row = rows[0]
+                raw = float(row.get(mp["value"], 0))
+                ratio = float(row.get(mp["ratio"], 0))
+                logger.info("Query %s: value=%s, ratio=%s", qid, raw, ratio)
+
+                self.after(0, self._update_quad, idx, raw, ratio)
+
+            # timestamp
+            self.after(0, lambda: self.ts.configure(text=f"Dernière mise à jour : {datetime.now():%H:%M:%S}"))
+
+        asyncio.run_coroutine_threadsafe(fetch(), self.loop)
+
+    # ───────────────────────────── UI update ────────────────────────────────
+
+    def _update_quad(self, idx: int, value: float, ratio: float):
         unit = self.units[idx]
-        value_text = self.format_number(raw_value, unit)
+        color, arrow = self._style_from_ratio(ratio)
 
-        # Sélection de la couleur et de la flèche
-        if ratio > 0:
-            color, arrow = self.colors["positive"], "↗"
-        elif ratio < 0:
-            color, arrow = self.colors["negative"], "↘"
-        else:
-            color, arrow = self.colors["neutral"], "→"
+        # Format output
+        text_val = self._fmt(value, unit)
+        text_tr  = f"{arrow} {math.ceil(ratio)}%" if unit == "%" else arrow
 
-        # Animation de fondu
-        self.fade(self.quadrants[idx]["frame"], color)
+        logger.info("Quadrant %s mis à jour: %s, ratio: %.1f", idx, text_val, ratio)
 
-        # Mise à jour des labels
-        self.quadrants[idx]["data"].configure(text=value_text, text_color=color)
-        
-        # Affichage du ratio pour l'évolution
-        if unit == "%":
-            trend_text = f"{arrow} {math.ceil(ratio)}{unit}"
-        else:
-            trend_text = arrow
-        self.quadrants[idx]["trend"].configure(text=trend_text, text_color=color)
+        fr = self.q[idx]
+        fr["val"].configure(text=text_val, text_color=color)
+        fr["trend"].configure(text=text_tr, text_color=color)
+        fr_color = transparent(color, "33")  # subtle tint
+        fr["frame"].configure(fg_color=fr_color)
 
-        # Message cadeau sur palier de 10% en positif (uniquement pour %)
+        # Gift popup every +10 %
         if unit == "%" and ratio > 0:
-            current_threshold = (math.ceil(ratio) // 10) * 10
-            if current_threshold >= 10 and current_threshold > self.last_gift_threshold[idx]:
-                self.show_gift(idx, current_threshold)
-                self.last_gift_threshold[idx] = current_threshold
+            palier = (math.ceil(ratio) // 10) * 10
+            if palier >= 10 and palier > self.last_gift[idx]:
+                self.last_gift[idx] = palier
+                self._gift_popup(palier)
 
-        logger.info(f"Quadrant {idx} mis à jour: {value_text}, ratio: {ratio:.1f}")
+    # ───────────────────────────── visuals ──────────────────────────────────
 
-    def fade(self, widget: ctk.CTkFrame, target_color: str, steps: int = 15, delay: int = 40):
-        """Animation de fondu pour les couleurs"""
-        def anim(n=0):
-            if n > steps:
-                return
-            # Progression plus douce
-            alpha = n / steps
-            widget.configure(fg_color=target_color)
-            widget.after(delay, lambda: anim(n + 1))
-        anim()
+    def _style_from_ratio(self, r: float):
+        if r > 0:
+            return self.COLORS["positive"], "↗"
+        if r < 0:
+            return self.COLORS["negative"], "↘"
+        return self.COLORS["neutral"], "→"
 
-    def show_gift(self, idx: int, threshold: int) -> None:
-        """Affiche un message de félicitations animé"""
-        dlg = ctk.CTkToplevel(self)
-        dlg.title("Félicitations! 🎁")
-        dlg.geometry("400x200")
-        dlg.attributes("-topmost", True)
-        
-        # Centrer la fenêtre
-        dlg.geometry(f"+{self.winfo_x() + 300}+{self.winfo_y() + 200}")
-        
-        msg = (
-            f"🎉 Fantastique ! 🎉\n\n"
-            f"Vous avez atteint {threshold}% !\n\n"
-            f"Voici votre gift : 🎁💝🌟"
-        )
-        
-        label = ctk.CTkLabel(
-            dlg,
-            text=msg,
-            font=("Montserrat", 16, "bold"),
-            text_color="#ffffff",
-            justify="center"
-        )
-        label.pack(expand=True, padx=20, pady=20)
-        
-        # Animation de la fenêtre (léger zoom)
-        def animate_popup(scale=0.8):
-            if scale <= 1.2:
-                # Effet de zoom subtil
-                dlg.after(30, lambda: animate_popup(scale + 0.02))
-        
-        animate_popup()
-        dlg.after(4000, dlg.destroy)
+    @staticmethod
+    def _fmt(num: float, unit: str) -> str:
+        if unit == "€":
+            return f"{math.ceil(num):,}€".replace(",", " ")
+        return f"{math.ceil(num)}{unit}"
 
-    def start_auto_refresh(self) -> None:
-        self.refresh_data()
-        self.after(15000, self.start_auto_refresh)
+    def _gift_popup(self, threshold: int):
+        pop = ctk.CTkToplevel(self)
+        pop.title("Good job ✨")
+        pop.geometry("380x180")
+        pop.attributes("-topmost", True)
+        ctk.CTkLabel(pop, text=f"🎉 On a atteint {threshold}% !", font=("Montserrat", 18, "bold")).pack(expand=True)
+        pop.after(3500, pop.destroy)
 
-    def refresh_data(self) -> None:
-        async def fetch_all():
-            try:
-                for i, (scr, qid, mp) in enumerate(zip(self.scrapers, self.queries, self.mappings)):
-                    start = time.perf_counter()
-                    data = await scr.execute_query(qid)
-                    duration = time.perf_counter() - start
-                    logger.info("Query %s en %.2fs", qid, duration)
-                    
-                    rows = data.get("query_result", {}).get("data", {}).get("rows", [])
-                    if rows:
-                        row = rows[0]
-                        
-                        # Extraction des valeurs selon le mapping
-                        raw_v = float(row.get(mp["value"], 0.0))
-                        ratio = float(row.get(mp["ratio"], 0.0))
-                        
-                        logger.info(f"Query {qid}: value={raw_v}, ratio={ratio}")
-                        
-                        # Correction de la closure : capture des valeurs actuelles
-                        def update_with_values(idx=i, rv=raw_v, r=ratio):
-                            self.update_quadrant(idx, rv, r)
-                        
-                        self.after(0, update_with_values)
-                    else:
-                        logger.warning("Pas de données pour la query %s", qid)
-
-                ts = datetime.now().strftime("%H:%M:%S")
-                self.after(0, lambda: self.ts_label.configure(text=f"Dernière mise à jour : {ts}"))
-                
-            except Exception as e:
-                logger.error("Erreur dans fetch_all: %s", e)
-
-        asyncio.run_coroutine_threadsafe(fetch_all(), self.loop)
+# ──────────────────────────────────────────────────────────────────────────────
+# Main entry point
+# ──────────────────────────────────────────────────────────────────────────────
 
 def main():
     load_dotenv()
     base_url = os.getenv("REDASH_BASE_URL", "")
-    
-    # Configuration corrigée basée sur vos exemples JSON
-    query_configs = [
-        # Query 111: EVOL - utilise EVOL pour valeur et ratio
+    cfgs = [
         {"id": 111, "api_key": os.getenv("KEY_EVOL", ""), "mapping": {"value": "EVOL", "ratio": "EVOL"}},
-        
-        # Query 110: CA J-1 H0 - utilise CA pour valeur et AVG pour ratio  
         {"id": 110, "api_key": os.getenv("KEY_CA_J1", ""), "mapping": {"value": "CA", "ratio": "AVG"}},
-        
-        # Query 109: CA J-N - utilise CA pour valeur et AVG pour ratio
         {"id": 109, "api_key": os.getenv("KEY_CA_JN", ""), "mapping": {"value": "CA", "ratio": "AVG"}},
     ]
 
-    app = DashboardApp(base_url, query_configs)
-    app.mainloop()
+    if not base_url:
+        raise SystemExit("REDASH_BASE_URL absent du .env")
+
+    DashboardApp(base_url, cfgs).mainloop()
+
 
 if __name__ == "__main__":
     main()
