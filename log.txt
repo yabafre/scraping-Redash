@@ -1,0 +1,52 @@
+(venv_dashboard) bobochic@raspberrypi:~/Documents/scraping-Redash $ python dashboard.py
+
+INFO:__main__:Logo chargé: logo.png
+/home/bobochic/Documents/scraping-Redash/venv_dashboard/lib/python3.11/site-packages/customtkinter/windows/widgets/core_widget_classes/ctk_base_class.py:179: UserWarning: CTkLabel Warning: Given image is not CTkImage but <class 'PIL.ImageTk.PhotoImage'>. Image can not be scaled on HighDPI displays, use CTkImage instead.
+
+  warnings.warn(f"{type(self).__name__} Warning: Given image is not CTkImage but {type(image)}. Image can not be scaled on HighDPI displays, use CTkImage instead.\n")
+INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/111/results.json?api_key=sgNWZzmTbwFbHVgmRtfRwQs0AAreBRAssCeaLJBq "HTTP/1.1 200 OK"
+INFO:__main__:Query 111 en 0.12s
+INFO:__main__:Query 111: value=3.8, ratio=3.8
+INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/110/results.json?api_key=yNa7BeMz2yRZHFXuL3Q8L2qtvtMcbWImlZlaQL3Q "HTTP/1.1 200 OK"
+INFO:__main__:Query 110 en 0.05s
+INFO:__main__:Query 110: value=93160.83, ratio=763.61336066
+INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/109/results.json?api_key=lt07P955jCzIgleu4DL1NPW30Icq5GxHKlV6dD8w "HTTP/1.1 200 OK"
+INFO:__main__:Query 109 en 0.04s
+INFO:__main__:Query 109: value=96702.5703, ratio=685.83383191
+Exception in Tkinter callback
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/tkinter/__init__.py", line 1948, in __call__
+    return self.func(*args)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/tkinter/__init__.py", line 861, in callit
+    func(*args)
+  File "/home/bobochic/Documents/scraping-Redash/dashboard.py", line 384, in _update_quad
+    self.confetti_animation.start_animation()
+  File "/home/bobochic/Documents/scraping-Redash/dashboard.py", line 117, in start_animation
+    self.canvas = tk.Canvas(
+                  ^^^^^^^^^^
+  File "/usr/lib/python3.11/tkinter/__init__.py", line 2744, in __init__
+    Widget.__init__(self, master, 'canvas', cnf, kw)
+  File "/usr/lib/python3.11/tkinter/__init__.py", line 2628, in __init__
+    self.tk.call(
+_tkinter.TclError: unknown color name ""
+INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/111/results.json?api_key=sgNWZzmTbwFbHVgmRtfRwQs0AAreBRAssCeaLJBq "HTTP/1.1 200 OK"
+INFO:__main__:Query 111 en 0.13s
+INFO:__main__:Query 111: value=3.8, ratio=3.8
+INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/110/results.json?api_key=yNa7BeMz2yRZHFXuL3Q8L2qtvtMcbWImlZlaQL3Q "HTTP/1.1 200 OK"
+INFO:__main__:Query 110 en 0.05s
+INFO:__main__:Query 110: value=93160.83, ratio=763.61336066
+INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/109/results.json?api_key=lt07P955jCzIgleu4DL1NPW30Icq5GxHKlV6dD8w "HTTP/1.1 200 OK"
+INFO:__main__:Query 109 en 0.05s
+INFO:__main__:Query 109: value=96702.5703, ratio=685.83383191
+INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/111/results.json?api_key=sgNWZzmTbwFbHVgmRtfRwQs0AAreBRAssCeaLJBq "HTTP/1.1 200 OK"
+INFO:__main__:Query 111 en 0.08s
+INFO:__main__:Query 111: value=3.8, ratio=3.8
+INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/110/results.json?api_key=yNa7BeMz2yRZHFXuL3Q8L2qtvtMcbWImlZlaQL3Q "HTTP/1.1 200 OK"
+INFO:__main__:Query 110 en 0.04s
+INFO:__main__:Query 110: value=93160.83, ratio=763.61336066
+INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/109/results.json?api_key=lt07P955jCzIgleu4DL1NPW30Icq5GxHKlV6dD8w "HTTP/1.1 200 OK"
+INFO:__main__:Query 109 en 0.04s
+INFO:__main__:Query 109: value=96702.5703, ratio=685.83383191
+(venv_dashboard) bobochic@raspberrypi:~/Documents/scraping-Redash $ 
+(venv_dashboard) bobochic@raspberrypi:~/Documents/scraping-Redash $ 
