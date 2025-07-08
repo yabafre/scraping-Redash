@@ -1,37 +1,55 @@
 import tkinter as tk
-import requests
+import asyncio
+import httpx
 import threading
+import logging
+import os
+import time
 from datetime import datetime
+from dotenv import load_dotenv
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class RedashScraper:
     def __init__(self, api_key: str, base_url: str) -> None:
         self.api_key = api_key
-        self.base_url = base_url.rstrip('/')
-        self.headers = {
-            "Authorization": f"Key {self.api_key}",
-            "Content-Type": "application/json",
-        }
+        self.base_url = base_url.rstrip("/")
+        self.headers = {"Authorization": f"Key {self.api_key}"}
+        self.client = httpx.AsyncClient(timeout=10.0)
 
-    def execute_query(self, query_id: int) -> dict:
+    async def close(self) -> None:
+        await self.client.aclose()
+
+    async def execute_query(self, query_id: int) -> dict:
         """Execute a Redash query and return JSON data."""
         url = f"{self.base_url}/api/queries/{query_id}/results"
-        response = requests.post(
-            url,
-            headers=self.headers,
-            json={"max_age": 0},
-        )
+        response = await self.client.post(url, headers=self.headers, json={"max_age": 0})
         response.raise_for_status()
-        return response.json()
+        data = response.json()
 
-    def get_conversion_ratio(self, data: dict) -> float:
-        """Compute conversion ratio from data (example implementation)."""
-        rows = data.get("query_result", {}).get("data", {}).get("rows", [])
-        if not rows:
-            return 0.0
-        value = rows[0].get("conversion", 0)
-        total = rows[0].get("total", 1)
-        return (value / total) * 100
+        job = data.get("job")
+        if job:
+            job_id = job.get("id")
+            while True:
+                job_resp = await self.client.get(f"{self.base_url}/api/jobs/{job_id}", headers=self.headers)
+                job_resp.raise_for_status()
+                job_data = job_resp.json()["job"]
+                status = job_data.get("status")
+                if status == 3:
+                    result_id = job_data.get("query_result_id")
+                    result_resp = await self.client.get(
+                        f"{self.base_url}/api/queries/results/{result_id}.json",
+                        headers=self.headers,
+                    )
+                    result_resp.raise_for_status()
+                    return result_resp.json()
+                if status in (4, 5):
+                    raise RuntimeError(f"Job {job_id} failed with status {status}")
+                await asyncio.sleep(1)
+
+        return data
 
 
 class DashboardApp:
@@ -41,6 +59,7 @@ class DashboardApp:
         api_key: str,
         base_url: str,
         queries: list[int],
+        mappings: list[dict[str, str]],
     ) -> None:
         self.master = master
         self.master.title("Dashboard Ventes")
@@ -49,6 +68,7 @@ class DashboardApp:
 
         self.scraper = RedashScraper(api_key, base_url)
         self.queries = queries
+        self.mappings = mappings
 
         self.colors = {
             "positive": "#2ECC71",
@@ -134,17 +154,30 @@ class DashboardApp:
             trend = "→"
             alert_needed = False
 
-        self.animate_color_change(quadrant["frame"], color)
+        self.fade(quadrant["frame"], quadrant["frame"].cget("bg"), color)
         quadrant["data"].config(text=f"{value}", fg=color)
         quadrant["trend"].config(text=trend, fg=color)
 
         if alert_needed:
             self.show_alert(quadrant_id, ratio)
 
-    def animate_color_change(
-        self, widget: tk.Widget, target_color: str
+    def fade(
+        self, widget: tk.Widget, start: str, end: str, steps: int = 10, delay: int = 50
     ) -> None:
-        widget.config(bg=target_color, highlightbackground=target_color)
+        sr, sg, sb = (int(start[i : i + 2], 16) for i in (1, 3, 5))
+        er, eg, eb = (int(end[i : i + 2], 16) for i in (1, 3, 5))
+
+        def step(n: int = 0) -> None:
+            if n > steps:
+                return
+            r = sr + (er - sr) * n // steps
+            g = sg + (eg - sg) * n // steps
+            b = sb + (eb - sb) * n // steps
+            c = f"#{r:02x}{g:02x}{b:02x}"
+            widget.config(bg=c, highlightbackground=c)
+            widget.after(delay, lambda: step(n + 1))
+
+        step()
 
     def show_alert(self, quadrant_id: int, ratio: float) -> None:
         alert = tk.Toplevel(self.master)
@@ -160,35 +193,53 @@ class DashboardApp:
             bg="red",
         )
         label.pack(expand=True)
+
+        def shake(count: int = 0) -> None:
+            if count > 10:
+                return
+            x = 10 if count % 2 == 0 else -10
+            alert.geometry(f"+{alert.winfo_x()+x}+{alert.winfo_y()}")
+            alert.after(50, lambda: shake(count + 1))
+
+        print("\a", end="")  # simple beep
+        shake()
         alert.after(5000, alert.destroy)
 
     def update_timestamp(self, timestamp: str) -> None:
         self.timestamp_label.config(text=f"Dernière mise à jour: {timestamp}")
 
-    def extract_value(self, data: dict) -> str:
-        rows = data.get("query_result", {}).get("data", {}).get("rows", [])
-        if not rows:
-            return "--"
-        return str(rows[0].get("value", "--"))
+    def extract_value(self, row: dict, column: str) -> str:
+        return str(row.get(column, "--"))
+
+    def compute_ratio(self, row: dict, column: str) -> float:
+        try:
+            return float(row.get(column, 0))
+        except (TypeError, ValueError):
+            return 0.0
 
     def refresh_data(self) -> None:
-        def fetch() -> None:
+        async def fetch() -> None:
             try:
                 for i, query_id in enumerate(self.queries):
-                    data = self.scraper.execute_query(query_id)
-                    ratio = self.scraper.get_conversion_ratio(data)
-                    value = self.extract_value(data)
+                    start = time.perf_counter()
+                    data = await self.scraper.execute_query(query_id)
+                    duration = time.perf_counter() - start
+                    logger.info("Appel Redash %s en %.2fs", query_id, duration)
+                    rows = data.get("query_result", {}).get("data", {}).get("rows", [])
+                    row = rows[0] if rows else {}
+                    mapping = self.mappings[i]
+                    value = self.extract_value(row, mapping["value"])
+                    ratio = self.compute_ratio(row, mapping["ratio"])
                     self.master.after(
                         0,
-                        lambda i=i, v=value, r=ratio:
-                            self.update_quadrant(i, v, r),
+                        lambda i=i, v=value, r=ratio: self.update_quadrant(i, v, r),
                     )
                 ts = datetime.now().strftime("%H:%M:%S")
                 self.master.after(0, lambda: self.update_timestamp(ts))
             except Exception as exc:  # pragma: no cover - simple logging
-                print(f"Erreur lors de l'actualisation: {exc}")
+                logger.error("Erreur lors de l'actualisation: %s", exc)
 
-        threading.Thread(target=fetch, daemon=True).start()
+        threading.Thread(target=lambda: asyncio.run(fetch()), daemon=True).start()
 
     def start_auto_refresh(self) -> None:
         self.refresh_data()
@@ -199,11 +250,18 @@ class DashboardApp:
 
 
 def main() -> None:
-    api_key = "your_api_key"
-    base_url = "redash.bobochic.com"
+    load_dotenv()
+    api_key = os.getenv("REDASH_API_KEY", "")
+    base_url = os.getenv("REDASH_BASE_URL", "")
     queries = [12, 34, 56, 78]
+    mappings = [
+        {"value": "value", "ratio": "conversion"},
+        {"value": "value", "ratio": "conversion"},
+        {"value": "value", "ratio": "conversion"},
+        {"value": "value", "ratio": "conversion"},
+    ]
     root = tk.Tk()
-    DashboardApp(root, api_key, base_url, queries)
+    DashboardApp(root, api_key, base_url, queries, mappings)
     root.mainloop()
 
 
