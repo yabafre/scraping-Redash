@@ -200,7 +200,7 @@ class DashboardApp:
 
 def main() -> None:
     api_key = "your_api_key"
-    base_url = "your_redash_url"
+    base_url = "redash.bobochic.com"
     queries = [12, 34, 56, 78]
     root = tk.Tk()
     DashboardApp(root, api_key, base_url, queries)
