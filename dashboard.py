@@ -41,9 +41,9 @@ class DashboardApp(ctk.CTk):
         self.queries  = [cfg["id"] for cfg in query_configs]
         self.mappings = [cfg["mapping"] for cfg in query_configs]
 
-        # Unités par quadrant
-        # 0: CA J-N (€), 1: Évolution (%), 2: CA J-1 H0 (€), 3: Conversion (%)
-        self.units = {0: "€", 1: "%", 2: "€", 3: "%"}
+        # Unités par quadrant (3 quadrants maintenant)
+        # 0: Évolution (%), 1: CA J-1 H0 (€), 2: CA J-N (€)
+        self.units = {0: "%", 1: "€", 2: "€"}
 
         # Couleurs
         self.colors = {"positive": "#2ECC71", "negative": "#E74C3C", "neutral": "#95A5A6"}
@@ -60,17 +60,26 @@ class DashboardApp(ctk.CTk):
         self.start_auto_refresh()
 
     def setup_layout(self) -> None:
-        # Grille 2×2 responsive
-        self.grid_rowconfigure((0, 1), weight=1)
-        self.grid_columnconfigure((0, 1), weight=1)
+        # Configuration pour 3 quadrants : 2 en haut, 1 en bas
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
 
-        titles = ["CA J-N", "Évolution", "CA J-1 H0", "Conversion"]
+        # Titres et positions : Évolution et CA J-1 H0 en haut, CA J-N en bas
+        titles = ["Évolution", "CA J-1 H0", "CA J-N"]
+        positions = [(0, 0), (0, 1), (1, 0)]  # (row, col)
+        
         self.quadrants = {}
 
-        for i, title in enumerate(titles):
-            r, c = divmod(i, 2)
+        for i, (title, (row, col)) in enumerate(zip(titles, positions)):
             frame = ctk.CTkFrame(master=self, corner_radius=10)
-            frame.grid(row=r, column=c, padx=10, pady=10, sticky="nsew")
+            
+            # CA J-N prend toute la largeur en bas
+            if i == 2:  # CA J-N
+                frame.grid(row=row, column=col, columnspan=2, padx=10, pady=10, sticky="nsew")
+            else:
+                frame.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
 
             ctk.CTkLabel(frame, text=title, font=("Arial", 16, "bold")).pack(pady=5)
             data_lbl  = ctk.CTkLabel(frame, text="--", font=("Arial", 48, "bold"))
@@ -85,10 +94,13 @@ class DashboardApp(ctk.CTk):
         self.ts_label.place(relx=1, rely=1, anchor="se", x=-10, y=-10)
 
     def update_quadrant(self, idx: int, raw_value: float, ratio: float) -> None:
+        if idx not in self.quadrants:
+            return
+            
         # Arrondi au plafond
         val_int = math.ceil(raw_value)
         unit = self.units[idx]
-        value_text = f"{val_int}{unit}"
+        value_text = f"{val_int:,}{unit}".replace(",", " ")  # Formatage des nombres
 
         # Sélection de la couleur et de la flèche
         if ratio > 0:
@@ -103,7 +115,8 @@ class DashboardApp(ctk.CTk):
 
         # Mise à jour des labels
         self.quadrants[idx]["data"].configure(text=value_text, text_color=color)
-        # On affiche le ratio avec unité pour l'évolution et la conversion
+        
+        # Affichage du ratio avec unité pour l'évolution
         if unit == "%":
             trend_text = f"{arrow} {math.ceil(ratio)}{unit}"
         else:
@@ -147,28 +160,42 @@ class DashboardApp(ctk.CTk):
 
     def refresh_data(self) -> None:
         async def fetch_all():
-            for i, (scr, qid, mp) in enumerate(zip(self.scrapers, self.queries, self.mappings)):
-                start = time.perf_counter()
-                data = await scr.execute_query(qid)
-                logger.info("Query %s en %.2fs", qid, time.perf_counter() - start)
-                row = data["query_result"]["data"]["rows"][0] if data["query_result"]["data"]["rows"] else {}
-                raw_v = float(row.get(mp["value"], 0.0))
-                ratio = float(row.get(mp["ratio"], 0.0))
-                self.after(0, lambda i=i, rv=raw_v, r=ratio: self.update_quadrant(i, rv, r))
+            try:
+                for i, (scr, qid, mp) in enumerate(zip(self.scrapers, self.queries, self.mappings)):
+                    start = time.perf_counter()
+                    data = await scr.execute_query(qid)
+                    logger.info("Query %s en %.2fs", qid, time.perf_counter() - start)
+                    
+                    rows = data.get("query_result", {}).get("data", {}).get("rows", [])
+                    if rows:
+                        row = rows[0]
+                        raw_v = float(row.get(mp["value"], 0.0))
+                        ratio = float(row.get(mp["ratio"], 0.0))
+                        
+                        # Correction de la closure : capture des valeurs actuelles
+                        def update_with_values(idx=i, rv=raw_v, r=ratio):
+                            self.update_quadrant(idx, rv, r)
+                        
+                        self.after(0, update_with_values)
+                    else:
+                        logger.warning("Pas de données pour la query %s", qid)
 
-            ts = datetime.now().strftime("%H:%M:%S")
-            self.after(0, lambda: self.ts_label.configure(text=f"Dernière mise à jour : {ts}"))
+                ts = datetime.now().strftime("%H:%M:%S")
+                self.after(0, lambda: self.ts_label.configure(text=f"Dernière mise à jour : {ts}"))
+            except Exception as e:
+                logger.error("Erreur dans fetch_all: %s", e)
 
         asyncio.run_coroutine_threadsafe(fetch_all(), self.loop)
 
 def main():
     load_dotenv()
     base_url = os.getenv("REDASH_BASE_URL", "")
+    
+    # Configuration pour 3 quadrants seulement (suppression de CONV)
     query_configs = [
-        {"id": 109, "api_key": os.getenv("KEY_CA_JN", ""),  "mapping": {"value": "CA",         "ratio": "AVG"}},
-        {"id": 111, "api_key": os.getenv("KEY_EVOL", ""),   "mapping": {"value": "EVOL",       "ratio": "EVOL"}},
-        {"id": 110, "api_key": os.getenv("KEY_CA_J1", ""),  "mapping": {"value": "CA",         "ratio": "AVG"}},
-        {"id": 109, "api_key": os.getenv("KEY_CONV", ""),   "mapping": {"value": "conversion", "ratio": "conversion"}},
+        {"id": 111, "api_key": os.getenv("KEY_EVOL", ""),   "mapping": {"value": "EVOL", "ratio": "EVOL"}},
+        {"id": 110, "api_key": os.getenv("KEY_CA_J1", ""),  "mapping": {"value": "CA",   "ratio": "AVG"}},
+        {"id": 109, "api_key": os.getenv("KEY_CA_JN", ""),  "mapping": {"value": "CA",   "ratio": "AVG"}},
     ]
 
     app = DashboardApp(base_url, query_configs)
