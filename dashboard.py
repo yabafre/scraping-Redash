@@ -243,6 +243,27 @@ class DashboardApp(ctk.CTk):
         self.grid_rowconfigure((0, 1), weight=1)
         self.grid_columnconfigure((0, 1), weight=1)
 
+        # Logo en haut à droite
+        if self.logo_image:
+            logo_frame = ctk.CTkFrame(self, fg_color="transparent")
+            logo_frame.place(relx=1.0, rely=0.0, anchor="ne", x=-20, y=20)
+            logo_label = ctk.CTkLabel(logo_frame, image=self.logo_image, text="")
+            logo_label.pack()
+
+        # Message central pour les notifications
+        self.message_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.message_frame.place(relx=0.5, rely=0.5, anchor="center")
+        self.message_label = ctk.CTkLabel(
+            self.message_frame,
+            text="",
+            font=("Montserrat", 32, "bold"),
+            text_color="#2ECC71",
+            fg_color="#1a1a1a",
+            corner_radius=15
+        )
+        self.message_label.pack(padx=30, pady=20)
+        self.message_frame.place_forget()  # Cacher initialement
+
         titles = ["Évolution", "CA J-1 H0", "CA J-N"]
         pos = [(0, 0), (0, 1), (1, 0)]
         self.q = {}
@@ -254,13 +275,9 @@ class DashboardApp(ctk.CTk):
             else:
                 frame.grid(row=r, column=c, padx=14, pady=14, sticky="nsew")
 
-            # Header avec logo et titre
+            # Header avec titre centré
             header_frame = ctk.CTkFrame(frame, fg_color="transparent")
             header_frame.pack(pady=12, fill="x")
-            
-            if self.logo_image and i == 0:  # Afficher le logo seulement sur le premier bloc
-                logo_label = ctk.CTkLabel(header_frame, image=self.logo_image, text="")
-                logo_label.pack(pady=(0, 10))
             
             title_label = ctk.CTkLabel(
                 header_frame, 
@@ -270,9 +287,9 @@ class DashboardApp(ctk.CTk):
             )
             title_label.pack(anchor="center")
 
-            val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 52, "bold"), text_color="#ffffff")
+            val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 72, "bold"), text_color="#ffffff")
             val.pack(expand=True)
-            trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 26), text_color="#ffffff")
+            trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 36), text_color="#ffffff")
             trend.pack(pady=6)
             
             # Message inspirant pour le bloc Évolution (index 0)
@@ -363,7 +380,7 @@ class DashboardApp(ctk.CTk):
             current_threshold = (ceil_signed(ratio) // 5) * 5
             if current_threshold >= 5 and current_threshold > self.last_gift[idx]:
                 self.last_gift[idx] = current_threshold
-                self._gift_popup(current_threshold)
+                self._show_message(f"🎁 {current_threshold}% atteint ! Excellent travail ! 👏")
 
     # ───────────────────────────── Utils ───────────────────────────────────
 
@@ -380,44 +397,21 @@ class DashboardApp(ctk.CTk):
             return f"{ceil_signed(num):,}€".replace(",", " ")
         return f"{ceil_signed(num)}{unit}"
 
+    def _show_message(self, text: str):
+        """Affiche un message au centre du dashboard"""
+        self.message_label.configure(text=text)
+        self.message_frame.place(relx=0.5, rely=0.5, anchor="center")
+        
+        # Masquer le message après 3 secondes
+        self.after(3000, self._hide_message)
+    
+    def _hide_message(self):
+        """Cache le message central"""
+        self.message_frame.place_forget()
+
     def _gift_popup(self, thresh: int):
-        pop = ctk.CTkToplevel(self)
-        pop.title("🎉 Félicitations !")
-        pop.geometry("400x200")
-        pop.attributes("-topmost", True)
-        
-        # Centrer la popup
-        pop.update_idletasks()
-        x = (pop.winfo_screenwidth() // 2) - (400 // 2)
-        y = (pop.winfo_screenheight() // 2) - (200 // 2)
-        pop.geometry(f"400x200+{x}+{y}")
-        
-        # Contenu de la popup
-        ctk.CTkLabel(
-            pop, 
-            text=f"🎁 {thresh}% atteint !", 
-            font=("Montserrat", 24, "bold"), 
-            text_color="#2ECC71"
-        ).pack(expand=True, pady=20)
-        
-        ctk.CTkLabel(
-            pop, 
-            text="Excellent travail ! 👏", 
-            font=("Montserrat", 16), 
-            text_color="#ffffff"
-        ).pack(pady=10)
-        
-        # Bouton fermer
-        ctk.CTkButton(
-            pop,
-            text="Fermer",
-            command=pop.destroy,
-            width=100,
-            height=30
-        ).pack(pady=10)
-        
-        # Fermeture automatique après 5 secondes
-        pop.after(5000, pop.destroy)
+        # Cette méthode n'est plus utilisée, remplacée par _show_message
+        pass
 
 # ───────────────────────────── Main ─────────────────────────────────────────
 
