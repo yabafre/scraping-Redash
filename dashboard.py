@@ -166,10 +166,10 @@ def main():
     base_url = os.getenv("REDASH_BASE_URL", "")
     # Configuration par requête : ID, clé API spécifique et mapping colonnes
     query_configs = [
-        {"id": 193016, "api_key": os.getenv("KEY_CA_JN", ""),   "mapping": {"value": "CA",      "ratio": "AVG"}},
-        {"id": 193017, "api_key": os.getenv("KEY_EVOL", ""),   "mapping": {"value": "EVOL",    "ratio": "EVOL"}},
-        {"id": 193018, "api_key": os.getenv("KEY_CA_J1", ""),  "mapping": {"value": "CA",      "ratio": "AVG"}},
-        {"id": 193019, "api_key": os.getenv("KEY_CONV", ""),  "mapping": {"value": "conversion", "ratio": "conversion"}},
+        {"id": 109, "api_key": os.getenv("KEY_CA_JN", ""),   "mapping": {"value": "CA",      "ratio": "AVG"}},
+        {"id": 111, "api_key": os.getenv("KEY_EVOL", ""),   "mapping": {"value": "EVOL",    "ratio": "EVOL"}},
+        {"id": 110, "api_key": os.getenv("KEY_CA_J1", ""),  "mapping": {"value": "CA",      "ratio": "AVG"}},
+        {"id": 109, "api_key": os.getenv("KEY_CONV", ""),  "mapping": {"value": "conversion", "ratio": "conversion"}},
     ]
 
     root = tk.Tk()
