@@ -417,17 +417,17 @@ class DashboardApp(ctk.CTk):
         if idx == 0:
             if ratio > 0:
                 self.q[idx]["inspiration"].configure(
-                    text="💪 1% d'inspiration et 99% de transpiration. ✨",
-                    text_color="#FFD700"  # Couleur dorée
+                    text="💪 1% d'inspiration et 99% de transpiration.",
+                    text_color="#000000"  # Noir pour une meilleure visibilité
                 )
             elif ratio < 0:
                 self.q[idx]["inspiration"].configure(
-                    text="🌱 Il n'y a de vie que dans les marges. 🎯",
+                    text="🌱 Il n'y a de vie que dans les marges.",
                     text_color="#FF6B6B"  # Couleur corail
                 )
             else:
                 self.q[idx]["inspiration"].configure(
-                    text="⚖️ L'équilibre est la clé du succès. 🔑",
+                    text="⚖️ L'équilibre est la clé du succès.",
                     text_color="#87CEEB"  # Couleur bleu ciel
                 )
         
