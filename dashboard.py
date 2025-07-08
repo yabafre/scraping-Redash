@@ -54,7 +54,7 @@ def get_dynamic_titles():
     """Génère des titres dynamiques avec les dates actuelles"""
     now = datetime.now()
     last_year = now - timedelta(days=365)
-    
+
     titles = {
         0: "Évolution",
         1: f"CA {last_year.strftime('%d/%m/%Y')} à {now.strftime('%Hh%M')}",
@@ -89,32 +89,32 @@ class RedashScraper:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class ConfettiParticle:
-    def __init__(self, x, y, canvas_width, canvas_height):
+    def __init__(self, x, y, vx, vy, color, canvas_width, canvas_height):
         self.x = x
         self.y = y
-        self.vx = random.uniform(-3, 3)
-        self.vy = random.uniform(-8, -3)
+        self.vx = vx
+        self.vy = vy
         self.gravity = 0.3
-        self.color = random.choice(['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8'])
+        self.color = color
         self.size = random.uniform(3, 8)
         self.canvas_width = canvas_width
         self.canvas_height = canvas_height
         self.rotation = random.uniform(0, 360)
         self.rotation_speed = random.uniform(-10, 10)
-        
+
     def update(self):
         self.x += self.vx
         self.y += self.vy
         self.vy += self.gravity
         self.rotation += self.rotation_speed
-        
+
         # Rebond sur les bords
         if self.x < 0 or self.x > self.canvas_width:
             self.vx *= -0.8
         if self.y > self.canvas_height:
             self.vy *= -0.6
             self.y = self.canvas_height
-            
+
     def is_alive(self):
         return self.y < self.canvas_height + 50 and abs(self.vx) > 0.1
 
@@ -124,40 +124,43 @@ class ConfettiAnimation:
         self.canvas = None
         self.particles = []
         self.animation_running = False
-        
+
     def start_animation(self):
         if self.animation_running:
             return
-            
+
         self.animation_running = True
-        
+
         # Créer le canvas par-dessus le frame avec un background transparent valide
         self.canvas = tk.Canvas(
-            self.parent_frame, 
+            self.parent_frame,
             highlightthickness=0,
             bg=self.parent_frame.cget('bg'),  # Utiliser la couleur de fond du parent
             width=self.parent_frame.winfo_width(),
             height=self.parent_frame.winfo_height()
         )
         self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        
-        # Créer les particules
+
+        # Créer les particules (optimisé pour Raspberry Pi)
         canvas_width = self.canvas.winfo_reqwidth()
         canvas_height = self.canvas.winfo_reqheight()
-        
-        for _ in range(50):
+
+        for _ in range(30):  # Réduit de 50 à 30 pour le Pi
             x = random.uniform(0, canvas_width)
             y = random.uniform(canvas_height * 0.8, canvas_height)
-            self.particles.append(ConfettiParticle(x, y, canvas_width, canvas_height))
-        
+            vx = random.uniform(-5, 5)
+            vy = random.uniform(-15, -5)
+            color = random.choice(['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7'])
+            self.particles.append(ConfettiParticle(x, y, vx, vy, color, canvas_width, canvas_height))
+
         self._animate()
-        
+
     def _animate(self):
         if not self.animation_running:
             return
-            
+
         self.canvas.delete("all")
-        
+
         alive_particles = []
         for particle in self.particles:
             particle.update()
@@ -172,14 +175,14 @@ class ConfettiAnimation:
                     fill=particle.color,
                     outline=""
                 )
-        
+
         self.particles = alive_particles
-        
+
         if len(self.particles) > 0:
-            self.parent_frame.after(16, self._animate)  # ~60 FPS
+            self.parent_frame.after(32, self._animate)  # Réduit de 16ms à 32ms (~30 FPS au lieu de 60)
         else:
             self.stop_animation()
-            
+
     def stop_animation(self):
         self.animation_running = False
         if self.canvas:
@@ -215,7 +218,7 @@ class DashboardApp(ctk.CTk):
 
         self.units = {0: "%", 1: "€", 2: "€"}
         self.last_gift = {0: 0, 1: 0, 2: 0}
-        
+
         # Logo
         self.logo_image = None
         self.load_logo()
@@ -250,7 +253,7 @@ class DashboardApp(ctk.CTk):
                         else:
                             # Garder la taille originale si elle est déjà >= 198px
                             image = image.resize((original_width, original_height), Image.Resampling.LANCZOS)
-                        
+
                         # Utiliser CTkImage pour éviter les warnings
                         self.logo_image = ctk.CTkImage(light_image=image, dark_image=image, size=image.size)
                         logger.info(f"Logo chargé: {path}")
@@ -269,7 +272,7 @@ class DashboardApp(ctk.CTk):
         titles = [titles_dict[0], titles_dict[1], titles_dict[2]]
         pos = [(0, 0), (0, 1), (1, 0)]
         self.q = {}
-        
+
         for i, ((r, c), title) in enumerate(zip(pos, titles)):
             frame = ctk.CTkFrame(self, corner_radius=14)
             if i == 2:
@@ -280,33 +283,33 @@ class DashboardApp(ctk.CTk):
             # Header avec titre centré
             header_frame = ctk.CTkFrame(frame, fg_color="transparent")
             header_frame.pack(pady=12, fill="x")
-            
+
             title_label = ctk.CTkLabel(
-                header_frame, 
-                text=title, 
-                font=("Montserrat", 24, "bold"),  
+                header_frame,
+                text=title,
+                font=("Montserrat", 24, "bold"),
                 text_color="#000000"
             )
             title_label.pack(anchor="center")
 
-            val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 76, "bold"), text_color="#ffffff")  
+            val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 76, "bold"), text_color="#ffffff")
             val.pack(expand=True)
-            
+
             # Pour le bloc Évolution (index 0), pas de trend, plus de place pour le message
             if i == 0:
                 inspiration = ctk.CTkLabel(
-                    frame, 
-                    text="", 
-                    font=("Montserrat", 22, "italic"),  
+                    frame,
+                    text="",
+                    font=("Montserrat", 22, "italic"),
                     text_color="#888888"
                 )
                 inspiration.pack(pady=(0, 20), expand=True)
                 self.q[i] = {"frame": frame, "val": val, "title": title_label, "inspiration": inspiration}
             else:
-                trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 40), text_color="#ffffff")  
+                trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 40), text_color="#ffffff")
                 trend.pack(pady=6)
                 self.q[i] = {"frame": frame, "val": val, "trend": trend, "title": title_label}
-            
+
             # Initialiser l'animation confettis pour le bloc CA J-N (index 2)
             if i == 2:
                 self.confetti_animation = ConfettiAnimation(frame)
@@ -328,8 +331,8 @@ class DashboardApp(ctk.CTk):
         if self.logo_image:
             self.logo_frame = ctk.CTkFrame(self, fg_color="#2b2b2b", corner_radius=10)
             self.logo_label = ctk.CTkLabel(
-                self.logo_frame, 
-                image=self.logo_image, 
+                self.logo_frame,
+                image=self.logo_image,
                 text="",
                 fg_color="transparent"
             )
@@ -337,7 +340,7 @@ class DashboardApp(ctk.CTk):
             # Placer le logo après un court délai pour s'assurer que la fenêtre est prête
             self.after(100, self._place_logo)
 
-        self.ts = ctk.CTkLabel(self, text="", font=("Montserrat", 18), text_color="#888888")  
+        self.ts = ctk.CTkLabel(self, text="", font=("Montserrat", 18), text_color="#888888")
         self.ts.place(relx=1, rely=1, anchor="se", x=-16, y=-16)
 
     def _place_logo(self):
@@ -348,12 +351,12 @@ class DashboardApp(ctk.CTk):
             self.logo_frame.lift()
             # Forcer la mise à jour de l'affichage
             self.logo_frame.update()
-    
+
     # ───────────────────────────── Scheduler ───────────────────────────────
 
     def _tick(self):
         self._refresh()
-        self.after(15_000, self._tick)
+        self.after(5_000, self._tick)
 
     # ───────────────────────────── Data fetch ──────────────────────────────
 
@@ -383,27 +386,27 @@ class DashboardApp(ctk.CTk):
         unit = self.units[idx]
         color, arrow = self._style(ratio)
         lighter = lighten(color, 0.85)
-        
+
         # Couleur du titre adaptée à l'état du bloc
         if ratio > 0:
-            title_color = "#000000"  
+            title_color = "#000000"
         elif ratio < 0:
-            title_color = "#000000"  
+            title_color = "#000000"
         else:
-            title_color = "#000000"  
+            title_color = "#000000"
 
         # Mettre à jour les titres dynamiquement avec les nouvelles dates/heures
         titles_dict = get_dynamic_titles()
         self.q[idx]["title"].configure(text=titles_dict[idx], text_color=title_color)
-        
+
         # Pour l'évolution, ne pas arrondir la valeur
         if idx == 0:
             formatted_value = f"{format_evolution(value)}{unit}"
         else:
             formatted_value = self._fmt(value, unit)
-        
+
         self.q[idx]["val"].configure(text=formatted_value, text_color=color)
-        
+
         # Pour l'évolution, ne pas afficher le trend (pourcentage)
         if idx == 0:
             # Pas de trend pour l'évolution
@@ -417,20 +420,20 @@ class DashboardApp(ctk.CTk):
         if idx == 0:
             if ratio > 0:
                 self.q[idx]["inspiration"].configure(
-                    text="💪 1% d'inspiration et 99% de transpiration.",
+                    text="1% d'inspiration et 99% de transpiration.",
                     text_color="#000000"  # Noir pour une meilleure visibilité
                 )
             elif ratio < 0:
                 self.q[idx]["inspiration"].configure(
-                    text="🌱 Il n'y a de vie que dans les marges.",
+                    text="Il n'y a de vie que dans les marges.",
                     text_color="#FF6B6B"  # Couleur corail
                 )
             else:
                 self.q[idx]["inspiration"].configure(
-                    text="⚖️ L'équilibre est la clé du succès.",
+                    text="L'équilibre est la clé du succès.",
                     text_color="#87CEEB"  # Couleur bleu ciel
                 )
-        
+
         # Animation confettis pour CA J-N (index 2) quand positif
         if idx == 2 and ratio > 0 and self.confetti_animation:
             self.confetti_animation.start_animation()
@@ -442,7 +445,7 @@ class DashboardApp(ctk.CTk):
             if current_threshold >= 5 and current_threshold > self.last_gift[idx]:
                 self.last_gift[idx] = current_threshold
                 self._show_gif_message(current_threshold)
-    
+
     def _show_gif_message(self, threshold: int):
         """Affiche un GIF animé au centre du dashboard"""
         gif_path = self._get_random_gif()
@@ -453,11 +456,11 @@ class DashboardApp(ctk.CTk):
                 # Redimensionner le GIF (max 300x300)
                 gif_image.thumbnail((300, 300), Image.Resampling.LANCZOS)
                 gif_photo = ImageTk.PhotoImage(gif_image)
-                
+
                 self.message_label.configure(image=gif_photo, text="")
                 self.message_label.image = gif_photo  # Garder une référence
                 self.message_frame.place(relx=0.5, rely=0.5, anchor="center")
-                
+
                 # Masquer le GIF après 3 secondes
                 self.after(3000, self._hide_message)
             except Exception as e:
@@ -467,18 +470,69 @@ class DashboardApp(ctk.CTk):
         else:
             # Pas de GIF trouvé, afficher un message texte
             self._show_text_message(f" {threshold}% atteint !")
-    
+
     def _get_random_gif(self) -> str:
-        """Retourne un chemin vers un GIF aléatoire dans le répertoire courant"""
+        """Retourne un chemin vers un GIF aléatoire dans le répertoire courant ou crée des GIFs par défaut"""
+        # Banque d'images GIF par défaut
+        default_gifs = [
+            "celebration.gif",
+            "success.gif", 
+            "trophy.gif",
+            "party.gif",
+            "fireworks.gif"
+        ]
+        
+        # Chercher les GIFs existants
         gif_patterns = ['*.gif', '*.GIF']
         gif_files = []
         for pattern in gif_patterns:
             gif_files.extend(glob.glob(pattern))
-        
+
+        # Si aucun GIF trouvé, créer des GIFs simples par défaut
+        if not gif_files:
+            self._create_default_gifs()
+            # Rechercher à nouveau après création
+            for pattern in gif_patterns:
+                gif_files.extend(glob.glob(pattern))
+
         if gif_files:
             return random.choice(gif_files)
         return None
-    
+
+    def _create_default_gifs(self):
+        """Crée des GIFs simples par défaut si aucun n'existe"""
+        try:
+            from PIL import Image, ImageDraw
+            
+            # Créer un GIF simple de célébration
+            frames = []
+            for i in range(10):
+                # Créer une image 200x200
+                img = Image.new('RGBA', (200, 200), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(img)
+                
+                # Dessiner des cercles colorés qui bougent
+                colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1']
+                for j, color in enumerate(colors):
+                    x = 50 + j * 30 + (i * 5) % 20
+                    y = 50 + (i * 3) % 30
+                    draw.ellipse([x, y, x+20, y+20], fill=color)
+                
+                frames.append(img)
+            
+            # Sauvegarder le GIF
+            frames[0].save(
+                'celebration.gif',
+                save_all=True,
+                append_images=frames[1:],
+                duration=100,
+                loop=0
+            )
+            logger.info("GIF de célébration créé par défaut")
+            
+        except Exception as e:
+            logger.warning(f"Impossible de créer les GIFs par défaut: {e}")
+
     def _show_text_message(self, text: str):
         """Affiche un message texte au centre du dashboard (fallback)"""
         self.message_label.configure(
@@ -488,14 +542,10 @@ class DashboardApp(ctk.CTk):
             text_color="#2ECC71"
         )
         self.message_frame.place(relx=0.5, rely=0.5, anchor="center")
-        
+
         # Masquer le message après 3 secondes
         self.after(3000, self._hide_message)
 
-    def _show_message(self, text: str):
-        """Méthode dépréciée, utiliser _show_gif_message ou _show_text_message"""
-        self._show_text_message(text)
-    
     def _hide_message(self):
         """Cache le message central"""
         self.message_frame.place_forget()
