@@ -16,12 +16,19 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
-def transparent(color: str, alpha: str = "22") -> str:
-    """Return the hex color with an added alpha channel (00‑FF)."""
-    color = color.lstrip("#")
-    if len(color) == 6:
-        return f"#{color}{alpha}"
-    return f"#{color}"
+def lighten(hex_color: str, factor: float = 0.7) -> str:
+    """Return a lighter 6-digit hex color (0 < factor < 1 → closer to white)."""
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    r = int(r + (255 - r) * factor)
+    g = int(g + (255 - g) * factor)
+    b = int(b + (255 - b) * factor)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def ceil_signed(x: float) -> int:
+    """Ceil for positives, floor for negatives to keep sign direction."""
+    return math.ceil(x) if x >= 0 else math.floor(x)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Data layer
@@ -30,14 +37,14 @@ def transparent(color: str, alpha: str = "22") -> str:
 class RedashScraper:
     """Minimal async wrapper around the Redash /results.json endpoint."""
 
-    _shared_client: httpx.AsyncClient | None = None
+    _client: httpx.AsyncClient | None = None
 
     def __init__(self, api_key: str, base_url: str):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
-        if RedashScraper._shared_client is None:
-            RedashScraper._shared_client = httpx.AsyncClient(timeout=10.0)
-        self.client: httpx.AsyncClient = RedashScraper._shared_client
+        if RedashScraper._client is None:
+            RedashScraper._client = httpx.AsyncClient(timeout=10.0)
+        self.client = RedashScraper._client
 
     async def execute_query(self, query_id: int) -> dict:
         url = f"{self.base_url}/api/queries/{query_id}/results.json"
@@ -50,15 +57,9 @@ class RedashScraper:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class DashboardApp(ctk.CTk):
-    """3‑quadrant dashboard with live data from Redash."""
+    COLORS = {"positive": "#2ECC71", "negative": "#E74C3C", "neutral": "#95A5A6"}
 
-    COLORS = {
-        "positive": "#2ECC71",
-        "negative": "#E74C3C",
-        "neutral": "#95A5A6",
-    }
-
-    def __init__(self, base_url: str, query_cfgs: list[dict]):
+    def __init__(self, base_url: str, cfgs: list[dict]):
         super().__init__()
         self.title("Dashboard Ventes")
         self.attributes("-fullscreen", True)
@@ -68,106 +69,96 @@ class DashboardApp(ctk.CTk):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
-        # Async loop in background thread
+        # Async loop
         self.loop = asyncio.new_event_loop()
         threading.Thread(target=self.loop.run_forever, daemon=True).start()
 
-        # Prepare data sources
-        self.scrapers = [RedashScraper(cfg["api_key"], base_url) for cfg in query_cfgs]
-        self.queries  = [cfg["id"]         for cfg in query_cfgs]
-        self.mappings = [cfg["mapping"]    for cfg in query_cfgs]
+        # Data
+        self.scrapers = [RedashScraper(c["api_key"], base_url) for c in cfgs]
+        self.queries = [c["id"] for c in cfgs]
+        self.mappings = [c["mapping"] for c in cfgs]
 
-        # Quadrant meta
         self.units = {0: "%", 1: "€", 2: "€"}
         self.last_gift = {0: 0, 1: 0, 2: 0}
 
-        # Build UI
-        self._build_layout()
-        self._schedule_refresh()
+        self._build_ui()
+        self._tick()
 
-    # ───────────────────────────── internal helpers ──────────────────────────
+    # ───────────────────────────── UI build ────────────────────────────────
 
-    def _build_layout(self):
+    def _build_ui(self):
         self.grid_rowconfigure((0, 1), weight=1)
         self.grid_columnconfigure((0, 1), weight=1)
 
-        titles = ["Évolution", "CA J‑1 H0", "CA J‑N"]
-        pos    = [(0, 0), (0, 1), (1, 0)]  # 3rd takes full width
-
+        titles = ["Évolution", "CA J-1 H0", "CA J-N"]
+        pos = [(0, 0), (0, 1), (1, 0)]
         self.q = {}
         for i, ((r, c), title) in enumerate(zip(pos, titles)):
-            frame = ctk.CTkFrame(self, corner_radius=16)
+            frame = ctk.CTkFrame(self, corner_radius=14)
             if i == 2:
-                frame.grid(row=r, column=c, columnspan=2, sticky="nsew", padx=16, pady=16)
+                frame.grid(row=r, column=c, columnspan=2, padx=14, pady=14, sticky="nsew")
             else:
-                frame.grid(row=r, column=c, sticky="nsew", padx=16, pady=16)
+                frame.grid(row=r, column=c, padx=14, pady=14, sticky="nsew")
 
             ctk.CTkLabel(frame, text=title, font=("Montserrat", 20, "bold"), text_color="#ffffff").pack(pady=12)
-            val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 54, "bold"), text_color="#ffffff")
+            val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 52, "bold"), text_color="#ffffff")
             val.pack(expand=True)
             trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 26), text_color="#ffffff")
-            trend.pack(pady=8)
+            trend.pack(pady=6)
             self.q[i] = {"frame": frame, "val": val, "trend": trend}
 
         self.ts = ctk.CTkLabel(self, text="", font=("Montserrat", 14), text_color="#888888")
-        self.ts.place(relx=1, rely=1, anchor="se", x=-18, y=-18)
+        self.ts.place(relx=1, rely=1, anchor="se", x=-16, y=-16)
 
-    # ───────────────────────────── data refresh ──────────────────────────────
+    # ───────────────────────────── Scheduler ───────────────────────────────
 
-    def _schedule_refresh(self):
+    def _tick(self):
         self._refresh()
-        self.after(15_000, self._schedule_refresh)
+        self.after(15_000, self._tick)
+
+    # ───────────────────────────── Data fetch ──────────────────────────────
 
     def _refresh(self):
         async def fetch():
-            for idx, (scraper, qid, mp) in enumerate(zip(self.scrapers, self.queries, self.mappings)):
+            for idx, (scr, qid, mp) in enumerate(zip(self.scrapers, self.queries, self.mappings)):
                 t0 = time.perf_counter()
-                data = await scraper.execute_query(qid)
+                data = await scr.execute_query(qid)
                 logger.info("Query %s en %.2fs", qid, time.perf_counter() - t0)
 
                 rows = data.get("query_result", {}).get("data", {}).get("rows", [])
                 if not rows:
                     continue
                 row = rows[0]
-                raw = float(row.get(mp["value"], 0))
+                value = float(row.get(mp["value"], 0))
                 ratio = float(row.get(mp["ratio"], 0))
-                logger.info("Query %s: value=%s, ratio=%s", qid, raw, ratio)
+                logger.info("Query %s: value=%s, ratio=%s", qid, value, ratio)
+                self.after(0, self._update_quad, idx, value, ratio)
 
-                self.after(0, self._update_quad, idx, raw, ratio)
-
-            # timestamp
             self.after(0, lambda: self.ts.configure(text=f"Dernière mise à jour : {datetime.now():%H:%M:%S}"))
 
         asyncio.run_coroutine_threadsafe(fetch(), self.loop)
 
-    # ───────────────────────────── UI update ────────────────────────────────
+    # ───────────────────────────── UI update ───────────────────────────────
 
     def _update_quad(self, idx: int, value: float, ratio: float):
         unit = self.units[idx]
-        color, arrow = self._style_from_ratio(ratio)
+        color, arrow = self._style(ratio)
+        lighter = lighten(color, 0.85)
 
-        # Format output
-        text_val = self._fmt(value, unit)
-        text_tr  = f"{arrow} {math.ceil(ratio)}%" if unit == "%" else arrow
+        self.q[idx]["val"].configure(text=self._fmt(value, unit), text_color=color)
+        trend_txt = f"{arrow} {ceil_signed(ratio)}%" if unit == "%" else arrow
+        self.q[idx]["trend"].configure(text=trend_txt, text_color=color)
+        self.q[idx]["frame"].configure(fg_color=lighter)
 
-        logger.info("Quadrant %s mis à jour: %s, ratio: %.1f", idx, text_val, ratio)
-
-        fr = self.q[idx]
-        fr["val"].configure(text=text_val, text_color=color)
-        fr["trend"].configure(text=text_tr, text_color=color)
-        fr_color = transparent(color, "33")  # subtle tint
-        fr["frame"].configure(fg_color=fr_color)
-
-        # Gift popup every +10 %
         if unit == "%" and ratio > 0:
-            palier = (math.ceil(ratio) // 10) * 10
+            palier = (ceil_signed(ratio) // 10) * 10
             if palier >= 10 and palier > self.last_gift[idx]:
                 self.last_gift[idx] = palier
                 self._gift_popup(palier)
 
-    # ───────────────────────────── visuals ──────────────────────────────────
+    # ───────────────────────────── Utils ───────────────────────────────────
 
-    def _style_from_ratio(self, r: float):
+    def _style(self, r: float):
         if r > 0:
             return self.COLORS["positive"], "↗"
         if r < 0:
@@ -175,34 +166,32 @@ class DashboardApp(ctk.CTk):
         return self.COLORS["neutral"], "→"
 
     @staticmethod
-    def _fmt(num: float, unit: str) -> str:
+    def _fmt(num: float, unit: str):
         if unit == "€":
-            return f"{math.ceil(num):,}€".replace(",", " ")
-        return f"{math.ceil(num)}{unit}"
+            return f"{ceil_signed(num):,}€".replace(",", " ")
+        return f"{ceil_signed(num)}{unit}"
 
-    def _gift_popup(self, threshold: int):
+    def _gift_popup(self, thresh: int):
         pop = ctk.CTkToplevel(self)
-        pop.title("Good job ✨")
-        pop.geometry("380x180")
+        pop.title("👏 Bravo !")
+        pop.geometry("360x160")
         pop.attributes("-topmost", True)
-        ctk.CTkLabel(pop, text=f"🎉 On a atteint {threshold}% !", font=("Montserrat", 18, "bold")).pack(expand=True)
-        pop.after(3500, pop.destroy)
+        ctk.CTkLabel(pop, text=f"🎉 {thresh}% atteint !", font=("Montserrat", 18, "bold"), text_color="#ffffff").pack(expand=True)
+        pop.after(3200, pop.destroy)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Main entry point
-# ──────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────── Main ─────────────────────────────────────────
 
 def main():
     load_dotenv()
-    base_url = os.getenv("REDASH_BASE_URL", "")
+    base_url = os.getenv("REDASH_BASE_URL", "").strip()
+    if not base_url:
+        raise SystemExit("REDASH_BASE_URL manquant dans .env")
+
     cfgs = [
         {"id": 111, "api_key": os.getenv("KEY_EVOL", ""), "mapping": {"value": "EVOL", "ratio": "EVOL"}},
         {"id": 110, "api_key": os.getenv("KEY_CA_J1", ""), "mapping": {"value": "CA", "ratio": "AVG"}},
         {"id": 109, "api_key": os.getenv("KEY_CA_JN", ""), "mapping": {"value": "CA", "ratio": "AVG"}},
     ]
-
-    if not base_url:
-        raise SystemExit("REDASH_BASE_URL absent du .env")
 
     DashboardApp(base_url, cfgs).mainloop()
 
