@@ -8,262 +8,173 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Configuration du logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 class RedashScraper:
     def __init__(self, api_key: str, base_url: str) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.headers = {"Authorization": f"Key {self.api_key}"}
+        # client asynchrone avec timeout
         self.client = httpx.AsyncClient(timeout=10.0)
 
     async def close(self) -> None:
         await self.client.aclose()
 
     async def execute_query(self, query_id: int) -> dict:
-        """Execute a Redash query and return JSON data."""
-        url = f"{self.base_url}/api/queries/{query_id}/results"
-        response = await self.client.post(url, headers=self.headers, json={"max_age": 0})
+        """
+        Exécute une requête Redash et renvoie le JSON de résultat.
+        Utilise l’endpoint unique /api/queries/:id/results.json?api_key=…
+        """
+        url = f"{self.base_url}/api/queries/{query_id}/results.json"
+        response = await self.client.get(url, params={"api_key": self.api_key})
         response.raise_for_status()
-        data = response.json()
-
-        job = data.get("job")
-        if job:
-            job_id = job.get("id")
-            while True:
-                job_resp = await self.client.get(f"{self.base_url}/api/jobs/{job_id}", headers=self.headers)
-                job_resp.raise_for_status()
-                job_data = job_resp.json()["job"]
-                status = job_data.get("status")
-                if status == 3:
-                    result_id = job_data.get("query_result_id")
-                    result_resp = await self.client.get(
-                        f"{self.base_url}/api/queries/results/{result_id}.json",
-                        headers=self.headers,
-                    )
-                    result_resp.raise_for_status()
-                    return result_resp.json()
-                if status in (4, 5):
-                    raise RuntimeError(f"Job {job_id} failed with status {status}")
-                await asyncio.sleep(1)
-
-        return data
-
+        return response.json()
 
 class DashboardApp:
     def __init__(
         self,
         master: tk.Tk,
-        api_key: str,
         base_url: str,
-        queries: list[int],
-        mappings: list[dict[str, str]],
+        query_configs: list[dict[str, object]],
     ) -> None:
         self.master = master
         self.master.title("Dashboard Ventes")
         self.master.attributes("-fullscreen", True)
         self.master.bind("<Escape>", self.exit_fullscreen)
 
-        self.scraper = RedashScraper(api_key, base_url)
-        self.queries = queries
-        self.mappings = mappings
+        # Création d’un scraper par requête (clé propre)
+        self.scrapers = [
+            RedashScraper(cfg["api_key"], base_url) for cfg in query_configs
+        ]
+        self.queries  = [cfg["id"]        for cfg in query_configs]
+        self.mappings = [cfg["mapping"]   for cfg in query_configs]
 
+        # Jeu de couleurs
         self.colors = {
             "positive": "#2ECC71",
             "negative": "#E74C3C",
-            "neutral": "#95A5A6",
+            "neutral":  "#95A5A6",
         }
 
         self.setup_layout()
         self.start_auto_refresh()
 
     def setup_layout(self) -> None:
+        """Configure la grille 2×2 et les widgets"""
         for i in range(2):
             self.master.grid_rowconfigure(i, weight=1)
             self.master.grid_columnconfigure(i, weight=1)
 
-        positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
-        titles = [
-            "Ventes Journalières",
-            "Conversion Web",
-            "Objectifs Mensuels",
-            "Performance Équipe",
-        ]
-
+        titles = ["CA J-N", "Évolution", "CA J-1 H0", "Conversion"]
         self.quadrants = {}
-        for i, (row, col) in enumerate(positions):
+
+        for i, title in enumerate(titles):
+            row, col = divmod(i, 2)
             frame = tk.Frame(self.master, relief="raised", borderwidth=2)
             frame.grid(row=row, column=col, sticky="nsew", padx=5, pady=5)
 
-            title_label = tk.Label(
-                frame,
-                text=titles[i],
-                font=("Arial", 16, "bold"),
-            )
-            title_label.pack(pady=10)
+            tk.Label(frame, text=title, font=("Arial", 16, "bold")).pack(pady=10)
+            data_lbl  = tk.Label(frame, text="--", font=("Arial", 48, "bold"))
+            trend_lbl = tk.Label(frame, text="→",  font=("Arial", 24))
+            data_lbl.pack(expand=True)
+            trend_lbl.pack(pady=5)
 
-            data_label = tk.Label(
-                frame,
-                text="--",
-                font=("Arial", 48, "bold"),
-            )
-            data_label.pack(expand=True)
+            self.quadrants[i] = {"frame": frame, "data": data_lbl, "trend": trend_lbl}
 
-            trend_label = tk.Label(
-                frame,
-                text="→",
-                font=("Arial", 24),
-            )
-            trend_label.pack(pady=5)
+        # Timestamp
+        self.ts_label = tk.Label(self.master, text="", font=("Arial", 12))
+        self.ts_label.place(relx=1.0, rely=1.0, anchor="se", x=-10, y=-10)
 
-            self.quadrants[i] = {
-                "frame": frame,
-                "data": data_label,
-                "trend": trend_label,
-            }
-
-        self.timestamp_label = tk.Label(
-            self.master,
-            text="",
-            font=("Arial", 12),
-        )
-        self.timestamp_label.place(
-            relx=1.0,
-            rely=1.0,
-            anchor="se",
-            x=-10,
-            y=-10,
-        )
-
-    def update_quadrant(
-        self, quadrant_id: int, value: str, ratio: float
-    ) -> None:
-        quadrant = self.quadrants[quadrant_id]
+    def update_quadrant(self, idx: int, value: str, ratio: float) -> None:
+        """Mise à jour graphique avec fondu et alertes"""
+        quad = self.quadrants[idx]
         if ratio > 0:
-            color = self.colors["positive"]
-            trend = "↗"
-            alert_needed = ratio > 20
+            color, arrow, alert = self.colors["positive"], "↗", ratio > 20
         elif ratio < 0:
-            color = self.colors["negative"]
-            trend = "↘"
-            alert_needed = ratio < -10
+            color, arrow, alert = self.colors["negative"], "↘", ratio < -10
         else:
-            color = self.colors["neutral"]
-            trend = "→"
-            alert_needed = False
+            color, arrow, alert = self.colors["neutral"],  "→", False
 
-        self.fade(quadrant["frame"], quadrant["frame"].cget("bg"), color)
-        quadrant["data"].config(text=f"{value}", fg=color)
-        quadrant["trend"].config(text=trend, fg=color)
+        self.fade(quad["frame"], quad["frame"].cget("bg"), color)
+        quad["data"].config(text=value, fg=color)
+        quad["trend"].config(text=arrow, fg=color)
 
-        if alert_needed:
-            self.show_alert(quadrant_id, ratio)
+        if alert:
+            self.show_alert(idx, ratio)
 
-    def fade(
-        self, widget: tk.Widget, start: str, end: str, steps: int = 10, delay: int = 50
-    ) -> None:
-        sr, sg, sb = (int(start[i : i + 2], 16) for i in (1, 3, 5))
-        er, eg, eb = (int(end[i : i + 2], 16) for i in (1, 3, 5))
-
-        def step(n: int = 0) -> None:
-            if n > steps:
-                return
-            r = sr + (er - sr) * n // steps
-            g = sg + (eg - sg) * n // steps
-            b = sb + (eb - sb) * n // steps
+    def fade(self, widget: tk.Widget, start: str, end: str, steps: int = 10, delay: int = 50) -> None:
+        """Interpolation de couleur pour animation en fondu"""
+        sr, sg, sb = (int(start[i:i+2], 16) for i in (1,3,5))
+        er, eg, eb = (int(end[i:i+2],   16) for i in (1,3,5))
+        def step(n: int = 0):
+            if n>steps: return
+            r = sr + (er-sr)*n//steps
+            g = sg + (eg-sg)*n//steps
+            b = sb + (eb-sb)*n//steps
             c = f"#{r:02x}{g:02x}{b:02x}"
             widget.config(bg=c, highlightbackground=c)
-            widget.after(delay, lambda: step(n + 1))
-
+            widget.after(delay, lambda: step(n+1))
         step()
 
-    def show_alert(self, quadrant_id: int, ratio: float) -> None:
+    def show_alert(self, idx: int, ratio: float) -> None:
+        """Popup animée + beep pour alerte"""
         alert = tk.Toplevel(self.master)
-        alert.title("Alerte Performance")
-        alert.geometry("400x200")
+        alert.title("Alerte")
+        alert.geometry("300x150")
         alert.attributes("-topmost", True)
-        msg = f"Attention! Quadrant {quadrant_id + 1}\nRatio: {ratio:.1f}%"
-        label = tk.Label(
-            alert,
-            text=msg,
-            font=("Arial", 14, "bold"),
-            fg="white",
-            bg="red",
-        )
-        label.pack(expand=True)
-
-        def shake(count: int = 0) -> None:
-            if count > 10:
-                return
-            x = 10 if count % 2 == 0 else -10
+        msg = f"Quadrant {idx+1}\nRatio: {ratio:.1f}%"
+        tk.Label(alert, text=msg, font=("Arial",14,"bold"), fg="white", bg="red").pack(expand=True)
+        # Shake
+        def shake(n=0):
+            if n>6: return
+            x = 10 if n%2==0 else -10
             alert.geometry(f"+{alert.winfo_x()+x}+{alert.winfo_y()}")
-            alert.after(50, lambda: shake(count + 1))
-
-        print("\a", end="")  # simple beep
+            alert.after(50, lambda: shake(n+1))
+        print("\a", end="")  # beep
         shake()
-        alert.after(5000, alert.destroy)
-
-    def update_timestamp(self, timestamp: str) -> None:
-        self.timestamp_label.config(text=f"Dernière mise à jour: {timestamp}")
-
-    def extract_value(self, row: dict, column: str) -> str:
-        return str(row.get(column, "--"))
-
-    def compute_ratio(self, row: dict, column: str) -> float:
-        try:
-            return float(row.get(column, 0))
-        except (TypeError, ValueError):
-            return 0.0
-
-    def refresh_data(self) -> None:
-        async def fetch() -> None:
-            try:
-                for i, query_id in enumerate(self.queries):
-                    start = time.perf_counter()
-                    data = await self.scraper.execute_query(query_id)
-                    duration = time.perf_counter() - start
-                    logger.info("Appel Redash %s en %.2fs", query_id, duration)
-                    rows = data.get("query_result", {}).get("data", {}).get("rows", [])
-                    row = rows[0] if rows else {}
-                    mapping = self.mappings[i]
-                    value = self.extract_value(row, mapping["value"])
-                    ratio = self.compute_ratio(row, mapping["ratio"])
-                    self.master.after(
-                        0,
-                        lambda i=i, v=value, r=ratio: self.update_quadrant(i, v, r),
-                    )
-                ts = datetime.now().strftime("%H:%M:%S")
-                self.master.after(0, lambda: self.update_timestamp(ts))
-            except Exception as exc:  # pragma: no cover - simple logging
-                logger.error("Erreur lors de l'actualisation: %s", exc)
-
-        threading.Thread(target=lambda: asyncio.run(fetch()), daemon=True).start()
+        alert.after(4000, alert.destroy)
 
     def start_auto_refresh(self) -> None:
+        """Lance la mise à jour cyclique toutes les 15s"""
         self.refresh_data()
         self.master.after(15000, self.start_auto_refresh)
+
+    def refresh_data(self) -> None:
+        """Récupère et affiche les données asynchrones"""
+        async def fetch_all():
+            for i, (scraper, qid, mapping) in enumerate(zip(self.scrapers, self.queries, self.mappings)):
+                start = time.perf_counter()
+                data = await scraper.execute_query(qid)
+                logger.info("Query %s en %.2fs", qid, time.perf_counter()-start)
+                row = data["query_result"]["data"]["rows"][0] if data["query_result"]["data"]["rows"] else {}
+                value = str(row.get(mapping["value"], "--"))
+                ratio = float(row.get(mapping["ratio"], 0.0))
+                self.master.after(0, lambda i=i, v=value, r=ratio: self.update_quadrant(i, v, r))
+            ts = datetime.now().strftime("%H:%M:%S")
+            self.master.after(0, lambda: self.ts_label.config(text=f"Dernière mise à jour: {ts}"))
+
+        threading.Thread(target=lambda: asyncio.run(fetch_all()), daemon=True).start()
 
     def exit_fullscreen(self, event=None) -> None:
         self.master.attributes("-fullscreen", False)
 
-
-def main() -> None:
+def main():
     load_dotenv()
-    api_key = os.getenv("REDASH_API_KEY", "")
     base_url = os.getenv("REDASH_BASE_URL", "")
-    queries = [12, 34, 56, 78]
-    mappings = [
-        {"value": "value", "ratio": "conversion"},
-        {"value": "value", "ratio": "conversion"},
-        {"value": "value", "ratio": "conversion"},
-        {"value": "value", "ratio": "conversion"},
+    # Configuration par requête : ID, clé API spécifique et mapping colonnes
+    query_configs = [
+        {"id": 193016, "api_key": os.getenv("KEY_CA_JN", ""),   "mapping": {"value": "CA",      "ratio": "AVG"}},
+        {"id": 193017, "api_key": os.getenv("KEY_EVOL", ""),   "mapping": {"value": "EVOL",    "ratio": "EVOL"}},
+        {"id": 193018, "api_key": os.getenv("KEY_CA_J1", ""),  "mapping": {"value": "CA",      "ratio": "AVG"}},
+        {"id": 193019, "api_key": os.getenv("KEY_CONV", ""),  "mapping": {"value": "conversion", "ratio": "conversion"}},
     ]
-    root = tk.Tk()
-    DashboardApp(root, api_key, base_url, queries, mappings)
-    root.mainloop()
 
+    root = tk.Tk()
+    DashboardApp(root, base_url, query_configs)
+    root.mainloop()
 
 if __name__ == "__main__":
     main()
