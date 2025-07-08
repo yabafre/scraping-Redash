@@ -7,6 +7,7 @@ import os
 import time
 import math
 import random
+import glob
 from datetime import datetime
 from dotenv import load_dotenv
 from PIL import Image, ImageTk
@@ -243,27 +244,6 @@ class DashboardApp(ctk.CTk):
         self.grid_rowconfigure((0, 1), weight=1)
         self.grid_columnconfigure((0, 1), weight=1)
 
-        # Logo en haut à droite
-        if self.logo_image:
-            logo_frame = ctk.CTkFrame(self, fg_color="transparent")
-            logo_frame.place(relx=1.0, rely=0.0, anchor="ne", x=-20, y=20)
-            logo_label = ctk.CTkLabel(logo_frame, image=self.logo_image, text="")
-            logo_label.pack()
-
-        # Message central pour les notifications
-        self.message_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.message_frame.place(relx=0.5, rely=0.5, anchor="center")
-        self.message_label = ctk.CTkLabel(
-            self.message_frame,
-            text="",
-            font=("Montserrat", 32, "bold"),
-            text_color="#2ECC71",
-            fg_color="#1a1a1a",
-            corner_radius=15
-        )
-        self.message_label.pack(padx=30, pady=20)
-        self.message_frame.place_forget()  # Cacher initialement
-
         titles = ["Évolution", "CA J-1 H0", "CA J-N"]
         pos = [(0, 0), (0, 1), (1, 0)]
         self.q = {}
@@ -309,9 +289,37 @@ class DashboardApp(ctk.CTk):
             if i == 2:
                 self.confetti_animation = ConfettiAnimation(frame)
 
+        # Message central pour les notifications (GIFs)
+        self.message_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.message_frame.place(relx=0.5, rely=0.5, anchor="center")
+        self.message_label = ctk.CTkLabel(
+            self.message_frame,
+            text="",
+            image=None,
+            fg_color="#1a1a1a",
+            corner_radius=15
+        )
+        self.message_label.pack(padx=30, pady=20)
+        self.message_frame.place_forget()  # Cacher initialement
+
+        # Logo en haut à droite (après la création des autres éléments)
+        if self.logo_image:
+            self.logo_frame = ctk.CTkFrame(self, fg_color="transparent")
+            self.logo_label = ctk.CTkLabel(self.logo_frame, image=self.logo_image, text="")
+            self.logo_label.pack()
+            # Placer le logo après un court délai pour s'assurer que la fenêtre est prête
+            self.after(100, self._place_logo)
+
         self.ts = ctk.CTkLabel(self, text="", font=("Montserrat", 14), text_color="#888888")
         self.ts.place(relx=1, rely=1, anchor="se", x=-16, y=-16)
 
+    def _place_logo(self):
+        """Place le logo en haut à droite après l'initialisation de la fenêtre"""
+        if hasattr(self, 'logo_frame'):
+            self.logo_frame.place(relx=1.0, rely=0.0, anchor="ne", x=-20, y=20)
+            # S'assurer que le logo reste au-dessus des autres éléments
+            self.logo_frame.lift()
+    
     # ───────────────────────────── Scheduler ───────────────────────────────
 
     def _tick(self):
@@ -380,7 +388,67 @@ class DashboardApp(ctk.CTk):
             current_threshold = (ceil_signed(ratio) // 5) * 5
             if current_threshold >= 5 and current_threshold > self.last_gift[idx]:
                 self.last_gift[idx] = current_threshold
-                self._show_message(f"🎁 {current_threshold}% atteint ! Excellent travail ! 👏")
+                self._show_gif_message(current_threshold)
+    
+    def _show_gif_message(self, threshold: int):
+        """Affiche un GIF animé au centre du dashboard"""
+        gif_path = self._get_random_gif()
+        if gif_path:
+            try:
+                # Charger et redimensionner le GIF
+                gif_image = Image.open(gif_path)
+                # Redimensionner le GIF (max 300x300)
+                gif_image.thumbnail((300, 300), Image.Resampling.LANCZOS)
+                gif_photo = ImageTk.PhotoImage(gif_image)
+                
+                self.message_label.configure(image=gif_photo, text="")
+                self.message_label.image = gif_photo  # Garder une référence
+                self.message_frame.place(relx=0.5, rely=0.5, anchor="center")
+                
+                # Masquer le GIF après 3 secondes
+                self.after(3000, self._hide_message)
+            except Exception as e:
+                logger.warning(f"Erreur lors du chargement du GIF {gif_path}: {e}")
+                # Fallback vers un message texte
+                self._show_text_message(f"🎁 {threshold}% atteint !")
+        else:
+            # Pas de GIF trouvé, afficher un message texte
+            self._show_text_message(f"🎁 {threshold}% atteint !")
+    
+    def _get_random_gif(self) -> str:
+        """Retourne un chemin vers un GIF aléatoire dans le répertoire courant"""
+        gif_patterns = ['*.gif', '*.GIF']
+        gif_files = []
+        for pattern in gif_patterns:
+            gif_files.extend(glob.glob(pattern))
+        
+        if gif_files:
+            return random.choice(gif_files)
+        return None
+    
+    def _show_text_message(self, text: str):
+        """Affiche un message texte au centre du dashboard (fallback)"""
+        self.message_label.configure(
+            text=text,
+            image=None,
+            font=("Montserrat", 32, "bold"),
+            text_color="#2ECC71"
+        )
+        self.message_frame.place(relx=0.5, rely=0.5, anchor="center")
+        
+        # Masquer le message après 3 secondes
+        self.after(3000, self._hide_message)
+
+    def _show_message(self, text: str):
+        """Méthode dépréciée, utiliser _show_gif_message ou _show_text_message"""
+        self._show_text_message(text)
+    
+    def _hide_message(self):
+        """Cache le message central"""
+        self.message_frame.place_forget()
+        # Nettoyer l'image pour libérer la mémoire
+        if hasattr(self.message_label, 'image'):
+            self.message_label.image = None
 
     # ───────────────────────────── Utils ───────────────────────────────────
 
@@ -396,22 +464,6 @@ class DashboardApp(ctk.CTk):
         if unit == "€":
             return f"{ceil_signed(num):,}€".replace(",", " ")
         return f"{ceil_signed(num)}{unit}"
-
-    def _show_message(self, text: str):
-        """Affiche un message au centre du dashboard"""
-        self.message_label.configure(text=text)
-        self.message_frame.place(relx=0.5, rely=0.5, anchor="center")
-        
-        # Masquer le message après 3 secondes
-        self.after(3000, self._hide_message)
-    
-    def _hide_message(self):
-        """Cache le message central"""
-        self.message_frame.place_forget()
-
-    def _gift_popup(self, thresh: int):
-        # Cette méthode n'est plus utilisée, remplacée par _show_message
-        pass
 
 # ───────────────────────────── Main ─────────────────────────────────────────
 
