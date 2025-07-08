@@ -113,11 +113,11 @@ class ConfettiAnimation:
             
         self.animation_running = True
         
-        # Créer le canvas par-dessus le frame
+        # Créer le canvas par-dessus le frame avec un background transparent valide
         self.canvas = tk.Canvas(
             self.parent_frame, 
             highlightthickness=0,
-            background='',
+            bg=self.parent_frame.cget('bg'),  # Utiliser la couleur de fond du parent
             width=self.parent_frame.winfo_width(),
             height=self.parent_frame.winfo_height()
         )
@@ -232,7 +232,9 @@ class DashboardApp(ctk.CTk):
                         else:
                             # Garder la taille originale si elle est déjà >= 198px
                             image = image.resize((original_width, original_height), Image.Resampling.LANCZOS)
-                        self.logo_image = ImageTk.PhotoImage(image)
+                        
+                        # Utiliser CTkImage pour éviter les warnings
+                        self.logo_image = ctk.CTkImage(light_image=image, dark_image=image, size=image.size)
                         logger.info(f"Logo chargé: {path}")
                         break
                 except Exception as e:
@@ -305,7 +307,12 @@ class DashboardApp(ctk.CTk):
         # Logo en haut à droite (après la création des autres éléments)
         if self.logo_image:
             self.logo_frame = ctk.CTkFrame(self, fg_color="transparent")
-            self.logo_label = ctk.CTkLabel(self.logo_frame, image=self.logo_image, text="")
+            self.logo_label = ctk.CTkLabel(
+                self.logo_frame, 
+                image=self.logo_image, 
+                text="",
+                fg_color="transparent"  # Pas de background pour le logo
+            )
             self.logo_label.pack()
             # Placer le logo après un court délai pour s'assurer que la fenêtre est prête
             self.after(100, self._place_logo)
@@ -375,6 +382,11 @@ class DashboardApp(ctk.CTk):
                 self.q[idx]["inspiration"].configure(
                     text="1% d'inspiration et 99% de transpiration.",
                     text_color="#2ECC71"
+                )
+            elif ratio < 0:
+                self.q[idx]["inspiration"].configure(
+                    text="Il n'y a de vie que dans les marges.",
+                    text_color="#E74C3C"
                 )
             else:
                 self.q[idx]["inspiration"].configure(text="")
