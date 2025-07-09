@@ -179,7 +179,7 @@ class ConfettiAnimation:
         )
         self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
 
-        self.particles.clear()
+        self.particles = []
 
         # Réinitialiser le compteur d'animation
         self._animation_frame_count = 0
@@ -258,11 +258,11 @@ class ConfettiAnimation:
                 fill=self.bg_color, outline=""
             )
 
-            # Texte du message (taille augmentée de 6px : 42 + 6 = 48px, maintenant +10px = 58px, +5px = 63px)
+            # Texte du message (taille augmentée de 6px : 42 + 6 = 48px, maintenant +10px = 58px, +5px = 63px, +10px = 73px, +10px = 83px)
             self.canvas.create_text(
                 center_x, center_y - 150,
                 text=self.message_text,
-                font=("Montserrat", 63, "bold"),
+                font=("Montserrat", 83, "bold"),
                 fill=self.message_color,
                 anchor="center"
             )
@@ -389,24 +389,24 @@ class DashboardApp(ctk.CTk):
             title = ctk.CTkLabel(
                 header_frame,
                 text=title,
-                font=("Montserrat", 39, "bold"),
+                font=("Montserrat", 59, "bold"),
                 text_color="#000000",
                 anchor="center"
             )
             title.pack(anchor="center")
-            val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 91, "bold"), text_color="#ffffff")
+            val = ctk.CTkLabel(frame, text="--", font=("Montserrat", 111, "bold"), text_color="#ffffff")
             val.pack(expand=True)
             if i == 0:
                 inspiration = ctk.CTkLabel(
                     frame,
                     text="",
-                    font=("Montserrat", 37, "italic"),
+                    font=("Montserrat", 57, "italic"),
                     text_color="#888888"
                 )
                 inspiration.pack(pady=(0, 20), expand=True)
                 self.q[i] = {"frame": frame, "val": val, "title": title, "inspiration": inspiration}
             else:
-                trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 55), text_color="#ffffff")
+                trend = ctk.CTkLabel(frame, text="→", font=("Montserrat", 75), text_color="#ffffff")
                 trend.pack(pady=6)
                 self.q[i] = {"frame": frame, "val": val, "trend": trend, "title": title}
 
@@ -418,21 +418,21 @@ class DashboardApp(ctk.CTk):
 
         # Test buttons inside test_frame
         test_confetti_btn = ctk.CTkButton(
-            self.test_frame, text="Test Confettis", command=self._test_confetti, width=120, height=30, font=("Montserrat", 27))
+            self.test_frame, text="Test Confettis", command=self._test_confetti, width=120, height=30, font=("Montserrat", 47))
         test_confetti_btn.pack(pady=2)
         toggle_test_btn = ctk.CTkButton(
-            self.test_frame, text="Mode Test", command=self._toggle_test_mode, width=120, height=30, font=("Montserrat", 27))
+            self.test_frame, text="Mode Test", command=self._toggle_test_mode, width=120, height=30, font=("Montserrat", 47))
         toggle_test_btn.pack(pady=2)
         simulate_btn = ctk.CTkButton(
-            self.test_frame, text="Simuler Données", command=self._simulate_test_data, width=120, height=30, font=("Montserrat", 27))
+            self.test_frame, text="Simuler Données", command=self._simulate_test_data, width=120, height=30, font=("Montserrat", 47))
         simulate_btn.pack(pady=2)
         reset_btn = ctk.CTkButton(
-            self.test_frame, text="Reset", command=self._reset_test_state, width=120, height=30, font=("Montserrat", 27))
+            self.test_frame, text="Reset", command=self._reset_test_state, width=120, height=30, font=("Montserrat", 47))
         reset_btn.pack(pady=2)
         help_label = ctk.CTkLabel(
             self.test_frame,
             text="Raccourcis: T=Test | S=Simulation | R=Reset",
-            font=("Montserrat", 25),
+            font=("Montserrat", 45),
             text_color="#888888"
         )
         help_label.pack(pady=(10, 0))
@@ -440,9 +440,9 @@ class DashboardApp(ctk.CTk):
         # Block notification fullscreen (hidden at start)
         self.celebration_frame = ctk.CTkFrame(self, fg_color="#212121", corner_radius=18)
         self.celebration_frame.place(relx=0.5, rely=0.5, anchor="center", relwidth=1, relheight=1)
-        self.celebration_label = ctk.CTkLabel(self.celebration_frame, text="", font=("Montserrat", 57, "bold"))
+        self.celebration_label = ctk.CTkLabel(self.celebration_frame, text="", font=("Montserrat", 77, "bold"))
         self.celebration_label.pack(expand=True, pady=30)
-        self.celebration_gift = ctk.CTkLabel(self.celebration_frame, image=None, text="", font=("Montserrat", 47))
+        self.celebration_gift = ctk.CTkLabel(self.celebration_frame, image=None, text="", font=("Montserrat", 67))
         self.celebration_gift.pack()
         self.celebration_frame.place_forget()
 
@@ -458,7 +458,7 @@ class DashboardApp(ctk.CTk):
             self.logo_label.lift()
             self.logo_label.update()
 
-        self.ts = ctk.CTkLabel(self, text="", font=("Montserrat", 33), text_color="#888888")
+        self.ts = ctk.CTkLabel(self, text="", font=("Montserrat", 53), text_color="#888888")
         self.ts.place(relx=1, rely=1, anchor="se", x=-16, y=-16)
 
     # ──────────────────────────────────────────
@@ -605,12 +605,6 @@ class DashboardApp(ctk.CTk):
         self.q[idx]["title"].configure(text=titles_dict[idx], text_color=title_color)
         formatted_value = f"{format_evolution(value)}{unit}" if idx == 0 else self._fmt(value, unit)
         self.q[idx]["val"].configure(text=formatted_value, text_color=color)
-        if idx == 0:
-            pass
-        else:
-            trend_txt = f"{arrow} {ceil_signed(ratio)}%" if unit == "%" else arrow
-            self.q[idx]["trend"].configure(text=trend_txt, text_color=color)
-        self.q[idx]["frame"].configure(fg_color=lighter)
         if idx == 0:
             if ratio > 0:
                 self.q[idx]["inspiration"].configure(
