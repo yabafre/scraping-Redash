@@ -1,9 +1,3 @@
-Voilà un **README complet et à jour** pour ton dashboard Redash sur Raspberry Pi, en version claire, **vraiment plug & play**, avec tout ce qu’il faut (prérequis, env, dépendances réelles, .env, service systemd, tips SSH si besoin).
-À la fin, je te mets aussi le bloc `requirement.txt` propre (préfère `pip install -r requirement.txt`).
-
----
-
-````markdown
 # Dashboard Ventes Redash – Raspberry Pi
 
 Dashboard graphique pour afficher en temps réel les indicateurs clés (ventes, évolution…) via API Redash, conçu pour tourner en plein écran sur un Raspberry Pi.
@@ -34,7 +28,7 @@ Dashboard graphique pour afficher en temps réel les indicateurs clés (ventes, 
    ```bash
    sudo apt update && sudo apt upgrade -y
    sudo apt install python3-pip python3-venv python3-tk unclutter git
-````
+   ```
 
 2. **Cloner le projet ou copier les fichiers**
 
