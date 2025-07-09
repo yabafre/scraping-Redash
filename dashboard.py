@@ -593,12 +593,16 @@ class DashboardApp(ctk.CTk):
     # ──────────────────────────────────────────
     def _update_quad(self, idx: int, value: float, ratio: float):
         unit = self.units[idx]
-        color, arrow = self._style(ratio)
-        lighter = lighten(color, 0.85)
-        title_color = "#000000"
         
         # Sauvegarder le ratio pour mise à jour du logo
         self._last_ratios[idx] = ratio
+        
+        # NOUVEAU: Utiliser uniquement l'évolution (bloc 0) pour déterminer l'état de TOUS les blocs
+        evolution_ratio = self._last_ratios.get(0, 0) if idx != 0 else ratio
+        color, arrow = self._style(evolution_ratio)
+        
+        lighter = lighten(color, 0.85)
+        title_color = "#000000"
         
         # Mettre à jour les titres avec les bonnes dates
         titles_dict = get_dynamic_titles(self._last_max_dates)
@@ -608,7 +612,8 @@ class DashboardApp(ctk.CTk):
         if idx == 0:
             pass
         else:
-            trend_txt = f"{arrow} {ceil_signed(ratio)}%" if unit == "%" else arrow
+            # Pour les blocs CA, afficher seulement la flèche (pas le pourcentage d'évolution)
+            trend_txt = arrow
             self.q[idx]["trend"].configure(text=trend_txt, text_color=color)
         self.q[idx]["frame"].configure(fg_color=lighter)
         if idx == 0:
