@@ -314,6 +314,7 @@ class DashboardApp(ctk.CTk):
 
         self.test_mode = False
         self.logo_image = None
+        self._last_ratios = {}  # Pour suivre les évolutions
         self.load_logo()
         self.confetti_animation = ConfettiAnimation(self)
         self._build_ui()
@@ -332,12 +333,23 @@ class DashboardApp(ctk.CTk):
                     image = Image.open(path).convert('RGBA')
                     # Resize ONLY, pas de fond blanc
                     original_width, original_height = image.size
-                    if original_width < 198:
-                        ratio = 198 / original_width
-                        new_height = int(original_height * ratio)
-                        image = image.resize((198, new_height), Image.Resampling.LANCZOS)
-                    else:
-                        image = image.resize((original_width, original_height), Image.Resampling.LANCZOS)
+                    
+                    # D'abord réduire la taille du logo à 80% de sa taille originale
+                    new_width = int(original_width * 0.8)
+                    new_height = int(original_height * 0.8)
+                    
+                    # Ensuite, s'assurer que la largeur ne dépasse pas 198px
+                    if new_width > 198:
+                        ratio = 198 / new_width
+                        new_width = 198
+                        new_height = int(new_height * ratio)
+                    elif new_width < 198:
+                        # Si trop petit après réduction, agrandir jusqu'à 198px
+                        ratio = 198 / new_width
+                        new_width = 198
+                        new_height = int(new_height * ratio)
+                        
+                    image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
                     self.logo_image = ctk.CTkImage(light_image=image, dark_image=image, size=image.size)
                     logger.info(f"Logo chargé (sans fond ajouté) : {path}")
                     return
@@ -422,12 +434,12 @@ class DashboardApp(ctk.CTk):
         self.celebration_frame.place_forget()
 
         if self.logo_image:
-            # Créer un fond blanc pour le logo
-            logo_bg = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=12)
-            logo_bg.place(relx=0.0, rely=0.0, anchor="nw", x=20, y=20)
+            # Créer un fond pour le logo (couleur par défaut)
+            self.logo_bg = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=12)
+            self.logo_bg.place(relx=0.0, rely=0.0, anchor="nw", x=20, y=20)
 
             self.logo_label = ctk.CTkLabel(
-                logo_bg, image=self.logo_image, text="", fg_color="transparent"
+                self.logo_bg, image=self.logo_image, text="", fg_color="transparent"
             )
             self.logo_label.pack(padx=10, pady=10)
             self.logo_label.lift()
@@ -566,6 +578,10 @@ class DashboardApp(ctk.CTk):
         color, arrow = self._style(ratio)
         lighter = lighten(color, 0.85)
         title_color = "#000000"
+        
+        # Sauvegarder le ratio pour mise à jour du logo
+        self._last_ratios[idx] = ratio
+        
         titles_dict = get_dynamic_titles()
         self.q[idx]["title"].configure(text=titles_dict[idx], text_color=title_color)
         formatted_value = f"{format_evolution(value)}{unit}" if idx == 0 else self._fmt(value, unit)
@@ -615,6 +631,10 @@ class DashboardApp(ctk.CTk):
                 # Auto-hide celebration if not at a multiple anymore
                 self._hide_celebration_block()
 
+        # Mettre à jour le fond du logo si c'est le premier quad
+        if idx == 0:
+            self._update_logo_background()
+
     # ──────────────────────────────────────────
     # Fullscreen "celebration" block
     # ──────────────────────────────────────────
@@ -643,6 +663,19 @@ class DashboardApp(ctk.CTk):
         if unit == "€":
             return f"{ceil_signed(num):,}€".replace(",", " ")
         return f"{ceil_signed(num)}{unit}"
+
+    def _update_logo_background(self):
+        """Met à jour le fond du logo selon l'évolution du premier quad (idx=0)"""
+        if hasattr(self, 'logo_bg') and len(self.q) > 0:
+            try:
+                # Récupérer la dernière évolution du premier quad
+                if hasattr(self, '_last_ratios') and 0 in self._last_ratios:
+                    ratio = self._last_ratios[0]
+                    color, _ = self._style(ratio)
+                    lighter = lighten(color, 0.9)  # Un peu plus clair que les blocks
+                    self.logo_bg.configure(fg_color=lighter)
+            except Exception as e:
+                logger.error(f"Erreur lors de la mise à jour du fond du logo: {e}")
 
 # ─────────────────────────────────────────────
 # Main
