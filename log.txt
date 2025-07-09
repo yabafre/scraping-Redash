@@ -1,44 +1,7 @@
-bobochic@raspberrypi:~/Documents/scraping-Redash $ python3 -m venv venv_dashboard
-bobochic@raspberrypi:~/Documents/scraping-Redash $ source venv_dashboard/bin/activate
-(venv_dashboard) bobochic@raspberrypi:~/Documents/scraping-Redash $ pip install customtkinter httpx python-dotenv pillow
-Looking in indexes: https://pypi.org/simple, https://www.piwheels.org/simple
-Collecting customtkinter
-  Using cached https://www.piwheels.org/simple/customtkinter/customtkinter-5.2.2-py3-none-any.whl (296 kB)
-Collecting httpx
-  Using cached https://www.piwheels.org/simple/httpx/httpx-0.28.1-py3-none-any.whl (73 kB)
-Collecting python-dotenv
-  Using cached python_dotenv-1.1.1-py3-none-any.whl (20 kB)
-Collecting pillow
-  Using cached pillow-11.3.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl (6.0 MB)
-Collecting darkdetect
-  Using cached https://www.piwheels.org/simple/darkdetect/darkdetect-0.8.0-py3-none-any.whl (9.0 kB)
-Collecting packaging
-  Using cached packaging-25.0-py3-none-any.whl (66 kB)
-Collecting anyio
-  Using cached https://www.piwheels.org/simple/anyio/anyio-4.9.0-py3-none-any.whl (100 kB)
-Collecting certifi
-  Using cached certifi-2025.7.9-py3-none-any.whl (159 kB)
-Collecting httpcore==1.*
-  Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
-Collecting idna
-  Using cached https://www.piwheels.org/simple/idna/idna-3.10-py3-none-any.whl (70 kB)
-Collecting h11>=0.16
-  Using cached h11-0.16.0-py3-none-any.whl (37 kB)
-Collecting sniffio>=1.1
-  Using cached https://www.piwheels.org/simple/sniffio/sniffio-1.3.1-py3-none-any.whl (10 kB)
-Collecting typing_extensions>=4.5
-  Using cached typing_extensions-4.14.1-py3-none-any.whl (43 kB)
-Installing collected packages: typing_extensions, sniffio, python-dotenv, pillow, packaging, idna, h11, darkdetect, certifi, httpcore, customtkinter, anyio, httpx
-Successfully installed anyio-4.9.0 certifi-2025.7.9 customtkinter-5.2.2 darkdetect-0.8.0 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.10 packaging-25.0 pillow-11.3.0 python-dotenv-1.1.1 sniffio-1.3.1 typing_extensions-4.14.1
-(venv_dashboard) bobochic@raspberrypi:~/Documents/scraping-Redash $ 
-(venv_dashboard) bobochic@raspberrypi:~/Documents/scraping-Redash $ python3 -m tkinter
-(venv_dashboard) bobochic@raspberrypi:~/Documents/scraping-Redash $ pip freeze > requirement.txt
-(venv_dashboard) bobochic@raspberrypi:~/Documents/scraping-Redash $ python dashboard.py
-INFO:__main__:Logo chargé (sans fond ajouté) : logo.png
-INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/111/results.json?api_key=sgNWZzmTbwFbHVgmRtfRwQs0AAreBRAssCeaLJBq "HTTP/1.1 200 OK"
-INFO:__main__:Query 111 en 0.20s
-INFO:__main__:Query 111: value=11.6, ratio=11.6
-INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/110/results.json?api_key=yNa7BeMz2yRZHFXuL3Q8L2qtvtMcbWImlZlaQL3Q "HTTP/1.1 200 OK"
-INFO:__main__:Query 110 en 0.05s
-INFO:__main__:Query 110: value=63719.81, ratio=786.66432099
-INFO:__main__:GIF chargé: gifts/gift_bof.gif avec 53 frames
+import customtkinter as ctk
+ctk.set_appearance_mode("dark")
+app = ctk.CTk()
+app.title("Test Tkinter Pi")
+label = ctk.CTkLabel(app, text="Hello World on Pi!", font=("Montserrat", 32))
+label.pack(padx=50, pady=50)
+app.mainloop()
