@@ -1,38 +1,41 @@
-bobochic@raspberrypi:~/Documents/scraping-Redash $ sudo venv_dashboard/bin/activate
-sudo: venv_dashboard/bin/activate : commande introuvable
-bobochic@raspberrypi:~/Documents/scraping-Redash $ python3 -m venv venv_dashboard
-bobochic@raspberrypi:~/Documents/scraping-Redash $ pip install pillow cairosvg
-error: externally-managed-environment
-
-× This environment is externally managed
-╰─> To install Python packages system-wide, try apt install
-    python3-xyz, where xyz is the package you are trying to
-    install.
-    
-    If you wish to install a non-Debian-packaged Python package,
-    create a virtual environment using python3 -m venv path/to/venv.
-    Then use path/to/venv/bin/python and path/to/venv/bin/pip. Make
-    sure you have python3-full installed.
-    
-    For more information visit http://rptl.io/venv
-
-note: If you believe this is a mistake, please contact your Python installation or OS distribution provider. You can override this, at the risk of breaking your Python installation or OS, by passing --break-system-packages.
-hint: See PEP 668 for the detailed specification.
-bobochic@raspberrypi:~/Documents/scraping-Redash $ pip install customtkinter httpx python-dotenv pillow
-error: externally-managed-environment
-
-× This environment is externally managed
-╰─> To install Python packages system-wide, try apt install
-    python3-xyz, where xyz is the package you are trying to
-    install.
-    
-    If you wish to install a non-Debian-packaged Python package,
-    create a virtual environment using python3 -m venv path/to/venv.
-    Then use path/to/venv/bin/python and path/to/venv/bin/pip. Make
-    sure you have python3-full installed.
-    
-    For more information visit http://rptl.io/venv
-
-note: If you believe this is a mistake, please contact your Python installation or OS distribution provider. You can override this, at the risk of breaking your Python installation or OS, by passing --break-system-packages.
-hint: See PEP 668 for the detailed specification.
-bobochic@raspberrypi:~/Documents/scraping-Redash $ 
+bobochic@raspberrypi:~/Documents/scraping-Redash $ source venv_dashboard/bin/activate
+(venv_dashboard) bobochic@raspberrypi:~/Documents/scraping-Redash $ pip install customtkinter httpx python-dotenv pillow
+Looking in indexes: https://pypi.org/simple, https://www.piwheels.org/simple
+Collecting customtkinter
+  Using cached https://www.piwheels.org/simple/customtkinter/customtkinter-5.2.2-py3-none-any.whl (296 kB)
+Collecting httpx
+  Using cached https://www.piwheels.org/simple/httpx/httpx-0.28.1-py3-none-any.whl (73 kB)
+Collecting python-dotenv
+  Using cached python_dotenv-1.1.1-py3-none-any.whl (20 kB)
+Collecting pillow
+  Using cached pillow-11.3.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl (6.0 MB)
+Collecting darkdetect
+  Using cached https://www.piwheels.org/simple/darkdetect/darkdetect-0.8.0-py3-none-any.whl (9.0 kB)
+Collecting packaging
+  Using cached packaging-25.0-py3-none-any.whl (66 kB)
+Collecting anyio
+  Using cached https://www.piwheels.org/simple/anyio/anyio-4.9.0-py3-none-any.whl (100 kB)
+Collecting certifi
+  Downloading certifi-2025.7.9-py3-none-any.whl (159 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 159.2/159.2 kB 3.3 MB/s eta 0:00:00
+Collecting httpcore==1.*
+  Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+Collecting idna
+  Using cached https://www.piwheels.org/simple/idna/idna-3.10-py3-none-any.whl (70 kB)
+Collecting h11>=0.16
+  Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+Collecting sniffio>=1.1
+  Using cached https://www.piwheels.org/simple/sniffio/sniffio-1.3.1-py3-none-any.whl (10 kB)
+Collecting typing_extensions>=4.5
+  Using cached typing_extensions-4.14.1-py3-none-any.whl (43 kB)
+Installing collected packages: typing_extensions, sniffio, python-dotenv, pillow, packaging, idna, h11, darkdetect, certifi, httpcore, customtkinter, anyio, httpx
+Successfully installed anyio-4.9.0 certifi-2025.7.9 customtkinter-5.2.2 darkdetect-0.8.0 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.10 packaging-25.0 pillow-11.3.0 python-dotenv-1.1.1 sniffio-1.3.1 typing_extensions-4.14.1
+(venv_dashboard) bobochic@raspberrypi:~/Documents/scraping-Redash $ python dashboard.py
+INFO:__main__:Logo chargé (sans fond ajouté) : logo.png
+INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/111/results.json?api_key=sgNWZzmTbwFbHVgmRtfRwQs0AAreBRAssCeaLJBq "HTTP/1.1 200 OK"
+INFO:__main__:Query 111 en 0.10s
+INFO:__main__:Query 111: value=18.7, ratio=18.7
+INFO:httpx:HTTP Request: GET https://redash.bobochicparis.com/api/queries/110/results.json?api_key=yNa7BeMz2yRZHFXuL3Q8L2qtvtMcbWImlZlaQL3Q "HTTP/1.1 200 OK"
+INFO:__main__:Query 110 en 0.04s
+INFO:__main__:Query 110: value=59026.32, ratio=747.16860759
+INFO:__main__:GIF chargé: gifts/gift_bof.gif avec 53 frames
