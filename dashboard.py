@@ -168,32 +168,37 @@ class ConfettiAnimation:
 
         self.particles.clear()
 
+        # Réinitialiser le compteur d'animation
+        self._animation_frame_count = 0
+
         # Zone centrale pour le message (éviter les confettis dans cette zone)
         center_x = canvas_width // 2
         center_y = canvas_height // 2
         message_zone_width = 800
         message_zone_height = 600  # Augmenté pour inclure le GIF plus grand
 
-        for _ in range(40):
-            # Générer des positions qui évitent la zone du message
-            while True:
-                x = random.uniform(0, canvas_width)
-                y = random.uniform(-canvas_height//2, 0)
+        # Générer les confettis seulement si c'est positif
+        if positive:
+            for _ in range(40):
+                # Générer des positions qui évitent la zone du message
+                while True:
+                    x = random.uniform(0, canvas_width)
+                    y = random.uniform(-canvas_height//2, 0)
 
-                # Vérifier si la particule va passer dans la zone du message
-                future_y = y + canvas_height  # Position approximative quand elle sera au centre
-                if not (center_x - message_zone_width//2 < x < center_x + message_zone_width//2 and
-                       center_y - message_zone_height//2 < future_y < center_y + message_zone_height//2):
-                    break
+                    # Vérifier si la particule va passer dans la zone du message
+                    future_y = y + canvas_height  # Position approximative quand elle sera au centre
+                    if not (center_x - message_zone_width//2 < x < center_x + message_zone_width//2 and
+                           center_y - message_zone_height//2 < future_y < center_y + message_zone_height//2):
+                        break
 
-            vx = random.uniform(-3, 3)
-            vy = random.uniform(1, 4)
-            color = random.choice(['#00C853', '#FF1744', '#00BCD4', '#FFC107', '#9C27B0', '#FF5722'])
-            size = random.uniform(8, 15)
-            angle = random.uniform(0, 360)
-            self.particles.append({
-                'x': x, 'y': y, 'vx': vx, 'vy': vy, 'color': color, 'size': size, 'angle': angle, 'spin': random.uniform(-8, 8)
-            })
+                vx = random.uniform(-3, 3)
+                vy = random.uniform(1, 4)
+                color = random.choice(['#00C853', '#FF1744', '#00BCD4', '#FFC107', '#9C27B0', '#FF5722'])
+                size = random.uniform(8, 15)
+                angle = random.uniform(0, 360)
+                self.particles.append({
+                    'x': x, 'y': y, 'vx': vx, 'vy': vy, 'color': color, 'size': size, 'angle': angle, 'spin': random.uniform(-8, 8)
+                })
         self._animate()
 
     def _animate(self):
@@ -201,7 +206,7 @@ class ConfettiAnimation:
             return
         self.canvas.delete("all")
 
-        # Dessiner les confettis
+        # Dessiner les confettis seulement s'il y en a
         alive_particles = []
         canvas_height = self.canvas.winfo_height()
         canvas_width = self.canvas.winfo_width()
@@ -261,8 +266,19 @@ class ConfettiAnimation:
                 self.gif_frame_index = (self.gif_frame_index + 1) % len(self.gift_frames)
 
         self.particles = alive_particles
-        if len(self.particles) > 0:
-            self.parent_window.after(32, self._animate)
+        
+        # Continuer l'animation tant qu'il y a des particules OU qu'on a un message à afficher
+        # Pour les cas négatifs sans confettis, on limite à 3.5 secondes (environ 110 frames à 32ms)
+        if len(self.particles) > 0 or (self.message_text and hasattr(self, '_animation_frame_count')):
+            if not hasattr(self, '_animation_frame_count'):
+                self._animation_frame_count = 0
+            self._animation_frame_count += 1
+            
+            # Arrêter après ~3.5 secondes si pas de confettis
+            if len(self.particles) == 0 and self._animation_frame_count > 110:
+                self.stop_animation()
+            else:
+                self.parent_window.after(32, self._animate)
         else:
             self.stop_animation()
 
@@ -563,17 +579,17 @@ class DashboardApp(ctk.CTk):
         if idx == 0:
             if ratio > 0:
                 self.q[idx]["inspiration"].configure(
-                    text="💪 1% d'inspiration et 99% de transpiration.",
+                    text=" 1% d'inspiration et 99% de transpiration.",
                     text_color="#000000"
                 )
             elif ratio < 0:
                 self.q[idx]["inspiration"].configure(
-                    text="🌱 Il n'y a de vie que dans les marges.",
+                    text=" Il n'y a de vie que dans les marges.",
                     text_color="#FF6B6B"
                 )
             else:
                 self.q[idx]["inspiration"].configure(
-                    text="⚖️ L'équilibre est la clé du succès.",
+                    text=" L'équilibre est la clé du succès.",
                     text_color="#87CEEB"
                 )
 
